@@ -30,7 +30,11 @@ process.stdin.on('end', () => {
     };
     const model = shortModel(data.model?.display_name || 'Claude');
     const dir = data.workspace?.current_dir || process.cwd();
-    const session = data.session_id || '';
+    // session_id is used to build paths under os.tmpdir() and ~/.claude/projects.
+    // Claude Code emits a UUID, but treat any unexpected shape as absent so a
+    // malformed value can't traverse out of those locations (e.g. "../foo").
+    const rawSession = data.session_id || '';
+    const session = /^[A-Za-z0-9_-]{1,128}$/.test(rawSession) ? rawSession : '';
     const rawRemaining = data.context_window?.remaining_percentage;
     const remaining = (rawRemaining == null || rawRemaining === '') ? NaN : Number(rawRemaining);
     const homeDir = os.homedir();
