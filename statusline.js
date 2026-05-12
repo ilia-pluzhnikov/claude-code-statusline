@@ -201,8 +201,11 @@ process.stdin.on('end', () => {
             const readBytes = stat.size - startOffset;
             const buf = Buffer.alloc(readBytes);
             const fd = fs.openSync(transcriptPath, 'r');
-            fs.readSync(fd, buf, 0, readBytes, startOffset);
-            fs.closeSync(fd);
+            try {
+              fs.readSync(fd, buf, 0, readBytes, startOffset);
+            } finally {
+              fs.closeSync(fd);
+            }
             let content = buf.toString('utf8');
             if (startOffset > 0) {
               const nl = content.indexOf('\n');
