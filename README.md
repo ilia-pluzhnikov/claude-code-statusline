@@ -145,6 +145,8 @@ The most common customizations:
 - Claude Code with statusline support (`statusLine` in `settings.json`)
 - Optional: `git` on `PATH` for the git-status segment
 
+## My Promotion
+
 А если хотите получше освоить Claude Code и вообще принцип работы AI, то у меня есть курс, где раз в месяц я набираю 10 людей и мы проходим 6 уровней, от установки до Context Engeenireng и теории про проактивных агентов по типу OpenClaw
 https://ilia-pro-ai.com/
 
