@@ -186,12 +186,22 @@ process.stdin.on('end', () => {
       // reset (current_usage is null but earlier messages had cache activity).
       if (session && (read > 0 || write > 0 || usageNull)) {
         try {
-          // Claude Code slug encoding: drive colon, separators, AND dots → '-'
-          // (e.g. C:\Users\ilyap\.openclaw → C--Users-ilyap--openclaw).
-          // Without the dot replacement, transcripts inside hidden dirs aren't
-          // found and the cache TTL/timestamp segment silently drops.
-          const slug = dir.replace(/[:\\\/.]/g, '-');
-          const transcriptPath = path.join(claudeDir, 'projects', slug, `${session}.jsonl`);
+          // Prefer the transcript path Claude Code hands us directly. Rebuilding
+          // it from a dir slug is fragile (drive letters, dots in hidden dirs)
+          // and — more importantly — wrong once current_dir diverges from the
+          // launch dir: the transcript stays anchored to project_dir's slug, so
+          // a slug built from current_dir points at a path that doesn't exist
+          // and the cache TTL/timestamp segment silently drops.
+          let transcriptPath = data.transcript_path;
+          if (!transcriptPath) {
+            // Fallback for Claude Code builds that omit transcript_path: rebuild
+            // the slug from the launch dir (project_dir), not current_dir, with
+            // the same colon/separator/dot → '-' encoding Claude Code uses
+            // (e.g. C:\Users\ilyap\.openclaw → C--Users-ilyap--openclaw).
+            const slugDir = data.workspace?.project_dir || dir;
+            const slug = slugDir.replace(/[:\\\/.]/g, '-');
+            transcriptPath = path.join(claudeDir, 'projects', slug, `${session}.jsonl`);
+          }
           if (fs.existsSync(transcriptPath)) {
             const stat = fs.statSync(transcriptPath);
             // Read 1 extra byte before the window so the first \n distinguishes
