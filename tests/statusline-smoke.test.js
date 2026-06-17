@@ -444,6 +444,52 @@ check('transcript slug encoding replaces dots in directory paths', () => {
   assert(text.includes('cache 99% ↓1k +10 1h:'), text);
 });
 
+check('launch-dir breadcrumb appears only when project_dir differs from current_dir', () => {
+  const parent = makeTempDir();
+  const launch = path.join(parent, 'rootproj');
+  const current = path.join(parent, 'subproj');
+  fs.mkdirSync(launch);
+  fs.mkdirSync(current);
+  const base = (project_dir) => ({
+    model: { display_name: 'Claude' },
+    session_id: 'test-session',
+    workspace: { current_dir: current, project_dir }
+  });
+
+  // Differs → "rootproj ▸ subproj" breadcrumb.
+  const diff = runStatusline(base(launch)).text;
+  assert(diff.includes('rootproj ▸ subproj'), `breadcrumb expected: ${diff}`);
+
+  // Branch still binds to the current dir, not the launch root.
+  const git = (file, args) => args.join(' ') === 'branch --show-current' ? 'feat' : '';
+  const withBranch = runStatusline(base(launch), {}, git).text;
+  assert(withBranch.includes('rootproj ▸ subproj (feat)'), `branch on current dir: ${withBranch}`);
+
+  // Equal dirs → no breadcrumb, no triangle.
+  const same = runStatusline(base(current)).text;
+  assert(same.includes('subproj'), same);
+  assert(!same.includes('▸'), `no breadcrumb when equal: ${same}`);
+
+  // project_dir absent → no breadcrumb (back-compat with older Claude Code).
+  const absent = runStatusline(inputFor(current)).text;
+  assert(!absent.includes('▸'), `no breadcrumb when project_dir absent: ${absent}`);
+});
+
+check('long launch-dir basename is middle-ellipsised in the breadcrumb', () => {
+  const parent = makeTempDir();
+  const launch = path.join(parent, '0123456789'.repeat(3)); // 30 chars
+  const current = path.join(parent, 'work');
+  fs.mkdirSync(launch);
+  fs.mkdirSync(current);
+
+  const { text } = runStatusline({
+    model: { display_name: 'Claude' },
+    session_id: 'test-session',
+    workspace: { current_dir: current, project_dir: launch }
+  });
+  assert(text.includes('0123456…3456789 ▸ work'), `launch dir shortened: ${text}`);
+});
+
 if (failures.length > 0) {
   console.error(failures.join('\n\n'));
   process.exitCode = 1;

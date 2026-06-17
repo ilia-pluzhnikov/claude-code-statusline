@@ -30,6 +30,10 @@ process.stdin.on('end', () => {
     };
     const model = shortModel(data.model?.display_name || 'Claude');
     const dir = data.workspace?.current_dir || process.cwd();
+    // Where the session was launched. Equals current_dir until a cd/dir switch
+    // moves the working dir elsewhere; the session + its transcript stay rooted
+    // here, so surfacing it avoids the "wrong dir" surprise.
+    const launchDir = data.workspace?.project_dir || '';
     const session = data.session_id || '';
     const rawRemaining = data.context_window?.remaining_percentage;
     const remaining = (rawRemaining == null || rawRemaining === '') ? NaN : Number(rawRemaining);
@@ -342,12 +346,17 @@ process.stdin.on('end', () => {
     }
 
     // --- Output ---
+    const shorten = (n) => n.length > 15 ? n.slice(0, 7) + '…' + n.slice(-7) : n;
     const dirRaw = path.basename(dir);
-    const dirShort = dirRaw.length > 15
-      ? dirRaw.slice(0, 7) + '…' + dirRaw.slice(-7)
-      : dirRaw;
+    const dirShort = shorten(dirRaw);
+    // Launch-dir breadcrumb: only when the working dir has moved away from where
+    // the session started, render "<launch> ▸ <current> (branch)" so it's clear
+    // the session is rooted elsewhere than $PWD. On the happy path (dirs equal,
+    // or no project_dir) nothing is added and the segment looks unchanged.
+    const launchRaw = (launchDir && launchDir !== dir) ? shorten(path.basename(launchDir)) : '';
     const buildDirSegment = (name) => {
-      let s = `\x1b[2m${name}\x1b[0m`;
+      let s = launchRaw ? `\x1b[2m${launchRaw} ▸ \x1b[0m` : '';
+      s += `\x1b[2m${name}\x1b[0m`;
       if (branch) s += ` \x1b[36m(${branch})\x1b[0m`;
       else if (detachedSha) s += ` \x1b[31m(HEAD@${detachedSha})\x1b[0m`;
       return s;

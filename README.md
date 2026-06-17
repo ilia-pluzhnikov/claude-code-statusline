@@ -30,6 +30,7 @@ shortened so the line fits in a 100-column terminal.
 |---------|---------|
 | `Op 4.7 (1m)` | Current model, abbreviated: family (`Op`/`So`/`Ha`/`My`) + space + version + context size (dim). `Opus 4.7 (1M context)` becomes `Op 4.7 (1m)`. Unrecognised model names are shown as-is. |
 | `claude-…tusline (main)` | Working directory basename (dim) + current branch in cyan; shows `(HEAD@<sha>)` in red for detached HEAD. The basename is trimmed to a 15-char `head…tail` middle ellipsis (7 chars each side) **only when the full status line would otherwise exceed 100 visible columns** — short lines keep the full name |
+| `tweaks ▸ statusline (main)` | When the working directory has moved away from where the session was launched (`workspace.project_dir` ≠ `workspace.current_dir`, e.g. after a `cd`), the launch dir basename is prepended as a dim `▸` breadcrumb so it's clear the session — and its transcript — is rooted elsewhere than `$PWD`. Hidden when the two match. The launch basename uses the same 15-char ellipsis rule |
 | `3M 1A 1D 1R 2? 1!` | Working tree status, bucketed by VS Code-style codes: `M` = modified, `A` = added/staged, `D` = deleted, `R` = renamed, `?` = untracked. All shown dim. `!` = unmerged conflict, rendered separately in **red** because it's the only one that blocks a commit. Empty buckets are hidden — clean repo shows nothing |
 | `↑2 push` / `↓1 pull` | Local branch is ahead/behind `origin/<branch>` |
 | `⚠ md drift` | `CLAUDE.md` ↔ `AGENTS.md` ↔ `GEMINI.md` are out of sync |
