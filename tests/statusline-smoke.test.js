@@ -477,6 +477,53 @@ check('transcript slug encoding replaces dots in directory paths', () => {
   assert(text.includes('cache 99% ↓1k +10 1h:'), text);
 });
 
+check('cache TTL reads transcript_path from stdin, ignoring the current_dir slug', () => {
+  const current = makeTempDir(); // current_dir — no transcript lives under its slug
+  const claude = makeTempDir();
+  const session = 'tp-session';
+  // Plant the transcript at an arbitrary path and hand it to the script via
+  // stdin. If the script still rebuilt a slug from current_dir it would miss it.
+  const tpath = path.join(claude, 'elsewhere', `${session}.jsonl`);
+  fs.mkdirSync(path.dirname(tpath), { recursive: true });
+  fs.writeFileSync(tpath, JSON.stringify({
+    type: 'assistant',
+    timestamp: new Date(Date.now() - 60 * 1000).toISOString(),
+    message: { usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, cache_creation: { ephemeral_1h_input_tokens: 10 } } }
+  }) + '\n');
+
+  const { text } = runStatusline(inputFor(current, {
+    session_id: session,
+    transcript_path: tpath,
+    context_window: {
+      current_usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, input_tokens: 0 }
+    }
+  }), { CLAUDE_CONFIG_DIR: claude });
+  assert(text.includes('cache 99% ↓1k +10 1h:'), text);
+});
+
+check('cache TTL falls back to project_dir slug (not current_dir) when transcript_path absent', () => {
+  const parent = makeTempDir();
+  const launch = path.join(parent, 'launchdir'); // project_dir — transcript anchored here
+  const current = path.join(parent, 'workdir');  // current_dir — moved here, nothing under its slug
+  fs.mkdirSync(launch);
+  fs.mkdirSync(current);
+  const claude = makeTempDir();
+  const session = 'fallback-session';
+  writeTranscript(claude, launch, session, [
+    JSON.stringify({ type: 'assistant', timestamp: new Date(Date.now() - 60 * 1000).toISOString(), message: { usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, cache_creation: { ephemeral_1h_input_tokens: 10 } } } })
+  ]);
+
+  const { text } = runStatusline({
+    model: { display_name: 'Claude' },
+    session_id: session,
+    workspace: { current_dir: current, project_dir: launch },
+    context_window: {
+      current_usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, input_tokens: 0 }
+    }
+  }, { CLAUDE_CONFIG_DIR: claude });
+  assert(text.includes('cache 99% ↓1k +10 1h:'), text);
+});
+
 if (failures.length > 0) {
   console.error(failures.join('\n\n'));
   process.exitCode = 1;
