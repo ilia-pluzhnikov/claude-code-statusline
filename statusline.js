@@ -35,7 +35,9 @@ process.stdin.on('end', () => {
     // capitalised first two chars rather than vanishing.
     const effortLevel = (data.effort?.level || '').toLowerCase();
     const EFFORT_CODES = { low: 'Lo', medium: 'Md', high: 'Hi', xhigh: 'Xh', max: 'Mx' };
-    const effortCode = EFFORT_CODES[effortLevel]
+    // Own-key lookup only: prototype keys ('constructor', '__proto__') must fall
+    // through to the generic fallback, not resolve to inherited members.
+    const effortCode = (Object.hasOwn(EFFORT_CODES, effortLevel) ? EFFORT_CODES[effortLevel] : '')
       || (effortLevel && effortLevel.slice(0, 2).replace(/^./, c => c.toUpperCase()));
     const dir = data.workspace?.current_dir || process.cwd();
     // Where the session was launched. Equals current_dir until a cd/dir switch

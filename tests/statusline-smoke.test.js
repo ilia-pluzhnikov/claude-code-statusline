@@ -128,6 +128,15 @@ check('effort tier renders as a 2-letter code attached to the model', () => {
     effort: { level: 'ultra' }
   }));
   assert.strictEqual(future.text.split(' │ ')[0], 'Op 4.8 Ul', `unknown level: ${future.text}`);
+
+  // Object.prototype keys must not resolve through the EFFORT_CODES prototype
+  // chain (e.g. 'constructor' → the Object function rendered into the line);
+  // they take the generic first-two-chars fallback like any unknown level.
+  const proto = runStatusline(inputFor(dir, {
+    model: { display_name: 'Opus 4.8' },
+    effort: { level: 'constructor' }
+  }));
+  assert.strictEqual(proto.text.split(' │ ')[0], 'Op 4.8 Co', `prototype key: ${proto.text}`);
 });
 
 check('context bar width and glyphs', () => {
