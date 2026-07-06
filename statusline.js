@@ -29,6 +29,14 @@ process.stdin.on('end', () => {
       return suffix;
     };
     const model = shortModel(data.model?.display_name || 'Claude');
+    // Reasoning-effort tier, present on stdin only for models that support it
+    // (so it's stable, not flickering). Render as a fixed 2-letter code that
+    // sits inline right after the model. Unknown future levels fall back to the
+    // capitalised first two chars rather than vanishing.
+    const effortLevel = (data.effort?.level || '').toLowerCase();
+    const EFFORT_CODES = { low: 'Lo', medium: 'Md', high: 'Hi', xhigh: 'Xh', max: 'Mx' };
+    const effortCode = EFFORT_CODES[effortLevel]
+      || (effortLevel && effortLevel.slice(0, 2).replace(/^./, c => c.toUpperCase()));
     const dir = data.workspace?.current_dir || process.cwd();
     // session_id is used to build paths under os.tmpdir() and ~/.claude/projects.
     // Claude Code emits a UUID, but treat any unexpected shape as absent so a
@@ -369,7 +377,8 @@ process.stdin.on('end', () => {
       else if (detachedSha) s += ` \x1b[31m(HEAD@${detachedSha})\x1b[0m`;
       return s;
     };
-    const segments = [`\x1b[2m${model}\x1b[0m`];
+    const effortSeg = effortCode ? ` \x1b[2m${effortCode}\x1b[0m` : '';
+    const segments = [`\x1b[2m${model}\x1b[0m${effortSeg}`];
     const dirIndex = segments.length;
     segments.push(buildDirSegment(dirRaw));
     if (gitInfo) segments.push(gitInfo.trim());

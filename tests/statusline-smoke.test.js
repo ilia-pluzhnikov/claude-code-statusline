@@ -104,6 +104,32 @@ check('model shortening', () => {
   }
 });
 
+check('effort tier renders as a 2-letter code attached to the model', () => {
+  const dir = makeTempDir();
+
+  // No effort object → first segment is just the model (unsupported model / back-compat).
+  const none = runStatusline(inputFor(dir, { model: { display_name: 'Opus 4.8' } }));
+  assert.strictEqual(none.text.split(' │ ')[0], 'Op 4.8', `no effort: ${none.text}`);
+
+  // Each documented level maps to its dim 2-letter code (same as the model), glued to it.
+  const map = { low: 'Lo', medium: 'Md', high: 'Hi', xhigh: 'Xh', max: 'Mx' };
+  for (const [level, code] of Object.entries(map)) {
+    const { raw, text } = runStatusline(inputFor(dir, {
+      model: { display_name: 'Opus 4.8' },
+      effort: { level }
+    }));
+    assert.strictEqual(text.split(' │ ')[0], `Op 4.8 ${code}`, `${level}: ${text}`);
+    assert(raw.includes(`\x1b[2m${code}\x1b[0m`), `${level} should be dim like the model: ${raw}`);
+  }
+
+  // Unknown future level falls back to capitalised first two chars (never vanishes).
+  const future = runStatusline(inputFor(dir, {
+    model: { display_name: 'Opus 4.8' },
+    effort: { level: 'ultra' }
+  }));
+  assert.strictEqual(future.text.split(' │ ')[0], 'Op 4.8 Ul', `unknown level: ${future.text}`);
+});
+
 check('context bar width and glyphs', () => {
   const dir = makeTempDir();
   for (let used = 0; used <= 100; used += 10) {

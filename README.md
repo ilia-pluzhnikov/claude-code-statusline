@@ -29,6 +29,7 @@ shortened so the line fits in a 100-column terminal.
 | Segment | Meaning |
 |---------|---------|
 | `Op 4.7 (1m)` | Current model, abbreviated: family (`Op`/`So`/`Ha`/`My`) + space + version + context size (dim). `Opus 4.7 (1M context)` becomes `Op 4.7 (1m)`. Unrecognised model names are shown as-is. |
+| `Op 4.7 Hi` | Reasoning-effort tier as a dim 2-letter code (same shade as the model) glued to it: `Lo`/`Md`/`Hi`/`Xh`/`Mx` for `low`/`medium`/`high`/`xhigh`/`max`. Reflects the live value (including mid-session `/effort` changes). Shown only on models that report `effort.level`; absent on models that don't support reasoning effort |
 | `claude-…tusline (main)` | Working directory basename (dim) + current branch in cyan; shows `(HEAD@<sha>)` in red for detached HEAD. The basename is trimmed to a 15-char `head…tail` middle ellipsis (7 chars each side) **only when the full status line would otherwise exceed 100 visible columns** — short lines keep the full name |
 | `3M 1A 1D 1R 2? 1!` | Working tree status, bucketed by VS Code-style codes: `M` = modified, `A` = added/staged, `D` = deleted, `R` = renamed, `?` = untracked. All shown dim. `!` = unmerged conflict, rendered separately in **red** because it's the only one that blocks a commit. Empty buckets are hidden — clean repo shows nothing |
 | `↑2 push` / `↓1 pull` | Local branch is ahead/behind `origin/<branch>` |
