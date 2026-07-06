@@ -15,32 +15,34 @@ process.stdin.on('end', () => {
   clearTimeout(stdinTimeout);
   try {
     const data = JSON.parse(input);
+    // Returns { base: 'Op4.8', ctx: ' (1m)' } so the effort code can slot in
+    // between them: the colon binds to the version, the context size trails.
     const shortModel = (name) => {
       const m = name.match(/^(?:claude-)?(Opus|Sonnet|Haiku|Mythos|Fable)[\s-]+(\d+(?:[.-]\d+)?)(?:\s*\(([^)]+)\))?/i);
-      if (!m) return name;
+      if (!m) return { base: name, ctx: '' };
       // Fable deviates from the first-two-letters rule: 'Fb' reads as Fable, 'Fa' doesn't.
       const family = /^fable$/i.test(m[1]) ? 'Fb'
         : m[1].charAt(0).toUpperCase() + m[1].charAt(1).toLowerCase();
       const version = m[2].replace('-', '.');
       const ctx = m[3];
-      let suffix = `${family} ${version}`;
+      let suffix = '';
       if (ctx) {
         const ctxMatch = ctx.match(/(\d+)\s*([KMG])/i);
-        if (ctxMatch) suffix += ` (${ctxMatch[1]}${ctxMatch[2].toLowerCase()})`;
+        if (ctxMatch) suffix = ` (${ctxMatch[1]}${ctxMatch[2].toLowerCase()})`;
       }
-      return suffix;
+      return { base: `${family}${version}`, ctx: suffix };
     };
     const model = shortModel(data.model?.display_name || 'Claude');
     // Reasoning-effort tier, present on stdin only for models that support it
-    // (so it's stable, not flickering). Render as a fixed 2-letter code that
-    // sits inline right after the model. Unknown future levels fall back to the
-    // capitalised first two chars rather than vanishing.
+    // (so it's stable, not flickering). Render as a short lowercase code glued
+    // to the model with a colon (Op4.8:hg). Unknown future levels fall back to
+    // their first two chars rather than vanishing.
     const effortLevel = (data.effort?.level || '').toLowerCase();
-    const EFFORT_CODES = { low: 'Lo', medium: 'Md', high: 'Hi', xhigh: 'Xh', max: 'Mx' };
+    const EFFORT_CODES = { low: 'lo', medium: 'md', high: 'hg', xhigh: 'xhg', max: 'mx' };
     // Own-key lookup only: prototype keys ('constructor', '__proto__') must fall
     // through to the generic fallback, not resolve to inherited members.
     const effortCode = (Object.hasOwn(EFFORT_CODES, effortLevel) ? EFFORT_CODES[effortLevel] : '')
-      || (effortLevel && effortLevel.slice(0, 2).replace(/^./, c => c.toUpperCase()));
+      || (effortLevel && effortLevel.slice(0, 2));
     const dir = data.workspace?.current_dir || process.cwd();
     // Where the session was launched. Equals current_dir until a cd/dir switch
     // moves the working dir elsewhere; the session + its transcript stay rooted
@@ -396,8 +398,8 @@ process.stdin.on('end', () => {
       else if (detachedSha) s += ` \x1b[31m(HEAD@${detachedSha})\x1b[0m`;
       return s;
     };
-    const effortSeg = effortCode ? ` \x1b[2m${effortCode}\x1b[0m` : '';
-    const segments = [`\x1b[2m${model}\x1b[0m${effortSeg}`];
+    const effortSeg = effortCode ? `:${effortCode}` : '';
+    const segments = [`\x1b[2m${model.base}${effortSeg}${model.ctx}\x1b[0m`];
     const dirIndex = segments.length;
     segments.push(buildDirSegment(dirRaw, launchRaw));
     if (gitInfo) segments.push(gitInfo.trim());

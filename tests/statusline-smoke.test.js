@@ -89,14 +89,14 @@ function check(name, fn) {
 check('model shortening', () => {
   const dir = makeTempDir();
   const cases = [
-    ['Opus 4.7 (1M context)', 'Op 4.7 (1m)'],
-    ['Sonnet 4.6', 'So 4.6'],
-    ['Haiku 4.5', 'Ha 4.5'],
+    ['Opus 4.7 (1M context)', 'Op4.7 (1m)'],
+    ['Sonnet 4.6', 'So4.6'],
+    ['Haiku 4.5', 'Ha4.5'],
     ['Claude', 'Claude'],
-    ['claude-opus-4-7', 'Op 4.7'],
-    ['Opus 5.0 (200K context)  ', 'Op 5.0 (200k)'],
-    ['Fable 5', 'Fb 5'],
-    ['claude-fable-5', 'Fb 5'],
+    ['claude-opus-4-7', 'Op4.7'],
+    ['Opus 5.0 (200K context)  ', 'Op5.0 (200k)'],
+    ['Fable 5', 'Fb5'],
+    ['claude-fable-5', 'Fb5'],
     ['Æther 4.7', 'Æther 4.7'],
     ['', 'Claude']
   ];
@@ -107,30 +107,37 @@ check('model shortening', () => {
   }
 });
 
-check('effort tier renders as a 2-letter code attached to the model', () => {
+check('effort tier renders as a lowercase :code glued to the model', () => {
   const dir = makeTempDir();
 
   // No effort object → first segment is just the model (unsupported model / back-compat).
   const none = runStatusline(inputFor(dir, { model: { display_name: 'Opus 4.8' } }));
-  assert.strictEqual(none.text.split(' │ ')[0], 'Op 4.8', `no effort: ${none.text}`);
+  assert.strictEqual(none.text.split(' │ ')[0], 'Op4.8', `no effort: ${none.text}`);
 
-  // Each documented level maps to its dim 2-letter code (same as the model), glued to it.
-  const map = { low: 'Lo', medium: 'Md', high: 'Hi', xhigh: 'Xh', max: 'Mx' };
+  // Each documented level maps to its lowercase code, colon-glued to the model.
+  const map = { low: 'lo', medium: 'md', high: 'hg', xhigh: 'xhg', max: 'mx' };
   for (const [level, code] of Object.entries(map)) {
     const { raw, text } = runStatusline(inputFor(dir, {
       model: { display_name: 'Opus 4.8' },
       effort: { level }
     }));
-    assert.strictEqual(text.split(' │ ')[0], `Op 4.8 ${code}`, `${level}: ${text}`);
-    assert(raw.includes(`\x1b[2m${code}\x1b[0m`), `${level} should be dim like the model: ${raw}`);
+    assert.strictEqual(text.split(' │ ')[0], `Op4.8:${code}`, `${level}: ${text}`);
+    assert(raw.includes(`\x1b[2mOp4.8:${code}\x1b[0m`), `${level} shares the model's dim span: ${raw}`);
   }
 
-  // Unknown future level falls back to capitalised first two chars (never vanishes).
+  // The context suffix stays at the end, after the effort code.
+  const withCtx = runStatusline(inputFor(dir, {
+    model: { display_name: 'Opus 4.8 (1M context)' },
+    effort: { level: 'high' }
+  }));
+  assert.strictEqual(withCtx.text.split(' │ ')[0], 'Op4.8:hg (1m)', `ctx after effort: ${withCtx.text}`);
+
+  // Unknown future level falls back to its first two chars (never vanishes).
   const future = runStatusline(inputFor(dir, {
     model: { display_name: 'Opus 4.8' },
     effort: { level: 'ultra' }
   }));
-  assert.strictEqual(future.text.split(' │ ')[0], 'Op 4.8 Ul', `unknown level: ${future.text}`);
+  assert.strictEqual(future.text.split(' │ ')[0], 'Op4.8:ul', `unknown level: ${future.text}`);
 
   // Object.prototype keys must not resolve through the EFFORT_CODES prototype
   // chain (e.g. 'constructor' → the Object function rendered into the line);
@@ -139,7 +146,7 @@ check('effort tier renders as a 2-letter code attached to the model', () => {
     model: { display_name: 'Opus 4.8' },
     effort: { level: 'constructor' }
   }));
-  assert.strictEqual(proto.text.split(' │ ')[0], 'Op 4.8 Co', `prototype key: ${proto.text}`);
+  assert.strictEqual(proto.text.split(' │ ')[0], 'Op4.8:co', `prototype key: ${proto.text}`);
 });
 
 check('context bar width and glyphs', () => {
