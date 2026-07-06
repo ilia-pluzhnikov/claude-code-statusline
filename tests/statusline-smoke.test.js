@@ -421,6 +421,39 @@ check('cache reset renders after compact when current_usage is null', () => {
   assert(text.includes('cache:reset'), text);
 });
 
+check('malformed session_id is rejected before being used in paths', () => {
+  const dir = makeTempDir();
+  const claude = makeTempDir();
+  const slugDir = path.join(claude, 'projects', slugFor(dir));
+  fs.mkdirSync(slugDir, { recursive: true });
+
+  // Plant a transcript at the path that '../valid' would resolve to when
+  // joined under the project slug dir. Unguarded code would read this file
+  // and render the TTL countdown; the validation should keep it untouched.
+  const traversedPath = path.join(claude, 'projects', 'valid.jsonl');
+  fs.writeFileSync(traversedPath, JSON.stringify({
+    type: 'assistant',
+    timestamp: new Date(Date.now() - 60 * 1000).toISOString(),
+    message: { usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, cache_creation: { ephemeral_1h_input_tokens: 10 } } }
+  }) + '\n');
+
+  const { text } = runStatusline(inputFor(dir, {
+    session_id: '../valid',
+    context_window: {
+      current_usage: {
+        cache_read_input_tokens: 1000,
+        cache_creation_input_tokens: 10,
+        input_tokens: 0
+      }
+    }
+  }), { CLAUDE_CONFIG_DIR: claude });
+
+  // Cache counters from stdin still render (they don't need a session_id),
+  // but the TTL bucket/countdown — which comes from the transcript — must not.
+  assert(text.includes('cache 99% ↓1k +10'), text);
+  assert(!/\b(?:1h|5m):/.test(text), 'transcript at traversed path must not be read: ' + text);
+});
+
 check('transcript slug encoding replaces dots in directory paths', () => {
   const parent = makeTempDir();
   const dir = path.join(parent, 'dotted.proj');
