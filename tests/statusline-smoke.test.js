@@ -503,6 +503,90 @@ check('transcript slug encoding replaces dots in directory paths', () => {
   assert(text.includes('cache 99% ↓1k +10 1h:'), text);
 });
 
+check('launch-dir breadcrumb appears only when project_dir differs from current_dir', () => {
+  const parent = makeTempDir();
+  const launch = path.join(parent, 'rootproj');
+  const current = path.join(parent, 'subproj');
+  fs.mkdirSync(launch);
+  fs.mkdirSync(current);
+  const base = (project_dir) => ({
+    model: { display_name: 'Claude' },
+    session_id: 'test-session',
+    workspace: { current_dir: current, project_dir }
+  });
+
+  // Differs → "rootproj ▸ subproj" breadcrumb.
+  const first = runStatusline(base(launch));
+  assert(first.text.includes('rootproj ▸ subproj'), `breadcrumb expected: ${first.text}`);
+  // Crumb and dir name share one dim span — no reset/re-open seam inside the segment.
+  assert(first.raw.includes('\x1b[2mrootproj ▸ subproj\x1b[0m'), `single dim span: ${JSON.stringify(first.raw)}`);
+
+  // Branch still binds to the current dir, not the launch root.
+  const git = (file, args) => args.join(' ') === 'branch --show-current' ? 'feat' : '';
+  const withBranch = runStatusline(base(launch), {}, git).text;
+  assert(withBranch.includes('rootproj ▸ subproj (feat)'), `branch on current dir: ${withBranch}`);
+
+  // Equal dirs → no breadcrumb, no triangle.
+  const same = runStatusline(base(current)).text;
+  assert(same.includes('subproj'), same);
+  assert(!same.includes('▸'), `no breadcrumb when equal: ${same}`);
+
+  // project_dir absent → no breadcrumb (back-compat with older Claude Code).
+  const absent = runStatusline(inputFor(current)).text;
+  assert(!absent.includes('▸'), `no breadcrumb when project_dir absent: ${absent}`);
+});
+
+check('launch-dir basename stays full on short lines (no eager ellipsis)', () => {
+  const parent = makeTempDir();
+  const launch = path.join(parent, '0123456789'.repeat(3)); // 30 chars
+  const current = path.join(parent, 'work');
+  fs.mkdirSync(launch);
+  fs.mkdirSync(current);
+
+  const { text } = runStatusline({
+    model: { display_name: 'Claude' },
+    session_id: 'test-session',
+    workspace: { current_dir: current, project_dir: launch }
+  });
+  assert(text.includes(`${'0123456789'.repeat(3)} ▸ work`), `full launch name on a short line: ${text}`);
+});
+
+check('breadcrumb participates in the 100-column budget: full → shortened → dropped', () => {
+  const parent = makeTempDir();
+  const launch = path.join(parent, '0123456789'.repeat(3)); // 30 chars
+  const current = path.join(parent, 'work'); // ≤15 chars: the old dirRaw!==dirShort gate never fired
+  fs.mkdirSync(launch);
+  fs.mkdirSync(current);
+  const at = (modelLen) => runStatusline({
+    model: { display_name: 'M'.repeat(modelLen) }, // unrecognised → rendered as-is
+    session_id: 'test-session',
+    workspace: { current_dir: current, project_dir: launch }
+  }).text;
+
+  // model(50) + crumb(30+3) + dir(4) + separators = 90 visible cols → fits, full crumb.
+  const fits = at(50);
+  assert(fits.includes('012345678901234567890123456789 ▸ work'), `fits, full crumb: ${fits}`);
+
+  // model(70) → 110 cols with the full crumb: launch name is shortened (→ 95).
+  const mid = at(70);
+  assert(mid.includes('0123456…3456789 ▸ work'), `shortened crumb: ${mid}`);
+
+  // model(90) → over budget even shortened (115): the crumb is dropped, dir stays.
+  const wide = at(90);
+  assert(!wide.includes('▸'), `crumb dropped: ${wide}`);
+  assert(wide.includes('work'), `dir name kept: ${wide}`);
+});
+
+check('no breadcrumb when project_dir is the same dir in a different spelling', () => {
+  const current = makeTempDir();
+  const { text } = runStatusline({
+    model: { display_name: 'Claude' },
+    session_id: 'test-session',
+    workspace: { current_dir: current, project_dir: current + path.sep }
+  });
+  assert(!text.includes('▸'), `trailing separator must not fake a move: ${text}`);
+});
+
 check('cache TTL reads transcript_path from stdin, ignoring the current_dir slug', () => {
   const current = makeTempDir(); // current_dir — no transcript lives under its slug
   const claude = makeTempDir();
