@@ -94,6 +94,8 @@ check('model shortening', () => {
     ['Claude', 'Claude'],
     ['claude-opus-4-7', 'Op 4.7'],
     ['Opus 5.0 (200K context)  ', 'Op 5.0 (200k)'],
+    ['Fable 5', 'Fb 5'],
+    ['claude-fable-5', 'Fb 5'],
     ['Æther 4.7', 'Æther 4.7'],
     ['', 'Claude']
   ];

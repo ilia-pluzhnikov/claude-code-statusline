@@ -16,9 +16,11 @@ process.stdin.on('end', () => {
   try {
     const data = JSON.parse(input);
     const shortModel = (name) => {
-      const m = name.match(/^(?:claude-)?(Opus|Sonnet|Haiku|Mythos)[\s-]+(\d+(?:[.-]\d+)?)(?:\s*\(([^)]+)\))?/i);
+      const m = name.match(/^(?:claude-)?(Opus|Sonnet|Haiku|Mythos|Fable)[\s-]+(\d+(?:[.-]\d+)?)(?:\s*\(([^)]+)\))?/i);
       if (!m) return name;
-      const family = m[1].charAt(0).toUpperCase() + m[1].charAt(1).toLowerCase();
+      // Fable deviates from the first-two-letters rule: 'Fb' reads as Fable, 'Fa' doesn't.
+      const family = /^fable$/i.test(m[1]) ? 'Fb'
+        : m[1].charAt(0).toUpperCase() + m[1].charAt(1).toLowerCase();
       const version = m[2].replace('-', '.');
       const ctx = m[3];
       let suffix = `${family} ${version}`;
