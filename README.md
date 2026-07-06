@@ -29,6 +29,7 @@ shortened so the line fits in a 100-column terminal.
 | Segment | Meaning |
 |---------|---------|
 | `Op 4.7 (1m)` | Current model, abbreviated: family (`Op`/`So`/`Ha`/`My`) + space + version + context size (dim). `Opus 4.7 (1M context)` becomes `Op 4.7 (1m)`. Unrecognised model names are shown as-is. |
+| `Op 4.7 Hi` | Reasoning-effort tier as a dim 2-letter code (same shade as the model) glued to it: `Lo`/`Md`/`Hi`/`Xh`/`Mx` for `low`/`medium`/`high`/`xhigh`/`max`. Reflects the live value (including mid-session `/effort` changes). Shown only on models that report `effort.level`; absent on models that don't support reasoning effort |
 | `claude-…tusline (main)` | Working directory basename (dim) + current branch in cyan; shows `(HEAD@<sha>)` in red for detached HEAD. The basename is trimmed to a 15-char `head…tail` middle ellipsis (7 chars each side) **only when the full status line would otherwise exceed 100 visible columns** — short lines keep the full name |
 | `tweaks ▸ statusline (main)` | When the working directory has moved away from where the session was launched (`workspace.project_dir` ≠ `workspace.current_dir`, e.g. after a `cd`), the launch dir basename is prepended as a dim `▸` breadcrumb so it's clear the session — and its transcript — is rooted elsewhere than `$PWD`. Hidden when the two match. The launch basename uses the same 15-char ellipsis rule |
 | `3M 1A 1D 1R 2? 1!` | Working tree status, bucketed by VS Code-style codes: `M` = modified, `A` = added/staged, `D` = deleted, `R` = renamed, `?` = untracked. All shown dim. `!` = unmerged conflict, rendered separately in **red** because it's the only one that blocks a commit. Empty buckets are hidden — clean repo shows nothing |
@@ -145,6 +146,14 @@ The most common customizations:
 - Node.js (any modern version — uses only built-in modules)
 - Claude Code with statusline support (`statusLine` in `settings.json`)
 - Optional: `git` on `PATH` for the git-status segment
+
+## My Promotion
+
+А если хотите получше освоить Claude Code и вообще принцип работы AI, то у меня есть курс, где раз в месяц я набираю 10 людей и мы проходим 6 уровней, от установки до Context Engeenireng и теории про проактивных агентов по типу OpenClaw
+https://ilia-pro-ai.com/
+
+<img width="1480" height="1123" alt="image" src="https://github.com/user-attachments/assets/cb8e6b16-2d60-4107-85c0-b01115cdb10e" />
+
 
 ## License
 

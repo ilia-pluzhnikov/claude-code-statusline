@@ -29,12 +29,24 @@ process.stdin.on('end', () => {
       return suffix;
     };
     const model = shortModel(data.model?.display_name || 'Claude');
+    // Reasoning-effort tier, present on stdin only for models that support it
+    // (so it's stable, not flickering). Render as a fixed 2-letter code that
+    // sits inline right after the model. Unknown future levels fall back to the
+    // capitalised first two chars rather than vanishing.
+    const effortLevel = (data.effort?.level || '').toLowerCase();
+    const EFFORT_CODES = { low: 'Lo', medium: 'Md', high: 'Hi', xhigh: 'Xh', max: 'Mx' };
+    const effortCode = EFFORT_CODES[effortLevel]
+      || (effortLevel && effortLevel.slice(0, 2).replace(/^./, c => c.toUpperCase()));
     const dir = data.workspace?.current_dir || process.cwd();
     // Where the session was launched. Equals current_dir until a cd/dir switch
     // moves the working dir elsewhere; the session + its transcript stay rooted
     // here, so surfacing it avoids the "wrong dir" surprise.
     const launchDir = data.workspace?.project_dir || '';
-    const session = data.session_id || '';
+    // session_id is used to build paths under os.tmpdir() and ~/.claude/projects.
+    // Claude Code emits a UUID, but treat any unexpected shape as absent so a
+    // malformed value can't traverse out of those locations (e.g. "../foo").
+    const rawSession = data.session_id || '';
+    const session = /^[A-Za-z0-9_-]{1,128}$/.test(rawSession) ? rawSession : '';
     const rawRemaining = data.context_window?.remaining_percentage;
     const remaining = (rawRemaining == null || rawRemaining === '') ? NaN : Number(rawRemaining);
     const homeDir = os.homedir();
@@ -190,12 +202,22 @@ process.stdin.on('end', () => {
       // reset (current_usage is null but earlier messages had cache activity).
       if (session && (read > 0 || write > 0 || usageNull)) {
         try {
-          // Claude Code slug encoding: drive colon, separators, AND dots → '-'
-          // (e.g. C:\Users\ilyap\.openclaw → C--Users-ilyap--openclaw).
-          // Without the dot replacement, transcripts inside hidden dirs aren't
-          // found and the cache TTL/timestamp segment silently drops.
-          const slug = dir.replace(/[:\\\/.]/g, '-');
-          const transcriptPath = path.join(claudeDir, 'projects', slug, `${session}.jsonl`);
+          // Prefer the transcript path Claude Code hands us directly. Rebuilding
+          // it from a dir slug is fragile (drive letters, dots in hidden dirs)
+          // and — more importantly — wrong once current_dir diverges from the
+          // launch dir: the transcript stays anchored to project_dir's slug, so
+          // a slug built from current_dir points at a path that doesn't exist
+          // and the cache TTL/timestamp segment silently drops.
+          let transcriptPath = data.transcript_path;
+          if (!transcriptPath) {
+            // Fallback for Claude Code builds that omit transcript_path: rebuild
+            // the slug from the launch dir (project_dir), not current_dir, with
+            // the same colon/separator/dot → '-' encoding Claude Code uses
+            // (e.g. C:\Users\ilyap\.openclaw → C--Users-ilyap--openclaw).
+            const slugDir = data.workspace?.project_dir || dir;
+            const slug = slugDir.replace(/[:\\\/.]/g, '-');
+            transcriptPath = path.join(claudeDir, 'projects', slug, `${session}.jsonl`);
+          }
           if (fs.existsSync(transcriptPath)) {
             const stat = fs.statSync(transcriptPath);
             // Read 1 extra byte before the window so the first \n distinguishes
@@ -205,8 +227,11 @@ process.stdin.on('end', () => {
             const readBytes = stat.size - startOffset;
             const buf = Buffer.alloc(readBytes);
             const fd = fs.openSync(transcriptPath, 'r');
-            fs.readSync(fd, buf, 0, readBytes, startOffset);
-            fs.closeSync(fd);
+            try {
+              fs.readSync(fd, buf, 0, readBytes, startOffset);
+            } finally {
+              fs.closeSync(fd);
+            }
             let content = buf.toString('utf8');
             if (startOffset > 0) {
               const nl = content.indexOf('\n');
@@ -361,7 +386,8 @@ process.stdin.on('end', () => {
       else if (detachedSha) s += ` \x1b[31m(HEAD@${detachedSha})\x1b[0m`;
       return s;
     };
-    const segments = [`\x1b[2m${model}\x1b[0m`];
+    const effortSeg = effortCode ? ` \x1b[2m${effortCode}\x1b[0m` : '';
+    const segments = [`\x1b[2m${model}\x1b[0m${effortSeg}`];
     const dirIndex = segments.length;
     segments.push(buildDirSegment(dirRaw));
     if (gitInfo) segments.push(gitInfo.trim());

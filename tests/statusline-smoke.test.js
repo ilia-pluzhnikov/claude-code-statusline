@@ -104,6 +104,32 @@ check('model shortening', () => {
   }
 });
 
+check('effort tier renders as a 2-letter code attached to the model', () => {
+  const dir = makeTempDir();
+
+  // No effort object → first segment is just the model (unsupported model / back-compat).
+  const none = runStatusline(inputFor(dir, { model: { display_name: 'Opus 4.8' } }));
+  assert.strictEqual(none.text.split(' │ ')[0], 'Op 4.8', `no effort: ${none.text}`);
+
+  // Each documented level maps to its dim 2-letter code (same as the model), glued to it.
+  const map = { low: 'Lo', medium: 'Md', high: 'Hi', xhigh: 'Xh', max: 'Mx' };
+  for (const [level, code] of Object.entries(map)) {
+    const { raw, text } = runStatusline(inputFor(dir, {
+      model: { display_name: 'Opus 4.8' },
+      effort: { level }
+    }));
+    assert.strictEqual(text.split(' │ ')[0], `Op 4.8 ${code}`, `${level}: ${text}`);
+    assert(raw.includes(`\x1b[2m${code}\x1b[0m`), `${level} should be dim like the model: ${raw}`);
+  }
+
+  // Unknown future level falls back to capitalised first two chars (never vanishes).
+  const future = runStatusline(inputFor(dir, {
+    model: { display_name: 'Opus 4.8' },
+    effort: { level: 'ultra' }
+  }));
+  assert.strictEqual(future.text.split(' │ ')[0], 'Op 4.8 Ul', `unknown level: ${future.text}`);
+});
+
 check('context bar width and glyphs', () => {
   const dir = makeTempDir();
   for (let used = 0; used <= 100; used += 10) {
@@ -421,6 +447,39 @@ check('cache reset renders after compact when current_usage is null', () => {
   assert(text.includes('cache:reset'), text);
 });
 
+check('malformed session_id is rejected before being used in paths', () => {
+  const dir = makeTempDir();
+  const claude = makeTempDir();
+  const slugDir = path.join(claude, 'projects', slugFor(dir));
+  fs.mkdirSync(slugDir, { recursive: true });
+
+  // Plant a transcript at the path that '../valid' would resolve to when
+  // joined under the project slug dir. Unguarded code would read this file
+  // and render the TTL countdown; the validation should keep it untouched.
+  const traversedPath = path.join(claude, 'projects', 'valid.jsonl');
+  fs.writeFileSync(traversedPath, JSON.stringify({
+    type: 'assistant',
+    timestamp: new Date(Date.now() - 60 * 1000).toISOString(),
+    message: { usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, cache_creation: { ephemeral_1h_input_tokens: 10 } } }
+  }) + '\n');
+
+  const { text } = runStatusline(inputFor(dir, {
+    session_id: '../valid',
+    context_window: {
+      current_usage: {
+        cache_read_input_tokens: 1000,
+        cache_creation_input_tokens: 10,
+        input_tokens: 0
+      }
+    }
+  }), { CLAUDE_CONFIG_DIR: claude });
+
+  // Cache counters from stdin still render (they don't need a session_id),
+  // but the TTL bucket/countdown — which comes from the transcript — must not.
+  assert(text.includes('cache 99% ↓1k +10'), text);
+  assert(!/\b(?:1h|5m):/.test(text), 'transcript at traversed path must not be read: ' + text);
+});
+
 check('transcript slug encoding replaces dots in directory paths', () => {
   const parent = makeTempDir();
   const dir = path.join(parent, 'dotted.proj');
@@ -488,6 +547,53 @@ check('long launch-dir basename is middle-ellipsised in the breadcrumb', () => {
     workspace: { current_dir: current, project_dir: launch }
   });
   assert(text.includes('0123456…3456789 ▸ work'), `launch dir shortened: ${text}`);
+});
+
+check('cache TTL reads transcript_path from stdin, ignoring the current_dir slug', () => {
+  const current = makeTempDir(); // current_dir — no transcript lives under its slug
+  const claude = makeTempDir();
+  const session = 'tp-session';
+  // Plant the transcript at an arbitrary path and hand it to the script via
+  // stdin. If the script still rebuilt a slug from current_dir it would miss it.
+  const tpath = path.join(claude, 'elsewhere', `${session}.jsonl`);
+  fs.mkdirSync(path.dirname(tpath), { recursive: true });
+  fs.writeFileSync(tpath, JSON.stringify({
+    type: 'assistant',
+    timestamp: new Date(Date.now() - 60 * 1000).toISOString(),
+    message: { usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, cache_creation: { ephemeral_1h_input_tokens: 10 } } }
+  }) + '\n');
+
+  const { text } = runStatusline(inputFor(current, {
+    session_id: session,
+    transcript_path: tpath,
+    context_window: {
+      current_usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, input_tokens: 0 }
+    }
+  }), { CLAUDE_CONFIG_DIR: claude });
+  assert(text.includes('cache 99% ↓1k +10 1h:'), text);
+});
+
+check('cache TTL falls back to project_dir slug (not current_dir) when transcript_path absent', () => {
+  const parent = makeTempDir();
+  const launch = path.join(parent, 'launchdir'); // project_dir — transcript anchored here
+  const current = path.join(parent, 'workdir');  // current_dir — moved here, nothing under its slug
+  fs.mkdirSync(launch);
+  fs.mkdirSync(current);
+  const claude = makeTempDir();
+  const session = 'fallback-session';
+  writeTranscript(claude, launch, session, [
+    JSON.stringify({ type: 'assistant', timestamp: new Date(Date.now() - 60 * 1000).toISOString(), message: { usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, cache_creation: { ephemeral_1h_input_tokens: 10 } } } })
+  ]);
+
+  const { text } = runStatusline({
+    model: { display_name: 'Claude' },
+    session_id: session,
+    workspace: { current_dir: current, project_dir: launch },
+    context_window: {
+      current_usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, input_tokens: 0 }
+    }
+  }, { CLAUDE_CONFIG_DIR: claude });
+  assert(text.includes('cache 99% ↓1k +10 1h:'), text);
 });
 
 if (failures.length > 0) {
