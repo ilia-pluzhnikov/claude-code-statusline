@@ -24,6 +24,7 @@ function runStatusline(input, env = {}, execFileSyncStub = () => '') {
     },
     process: {
       env: { ...process.env, ...env },
+      platform: process.platform,
       stdin,
       stdout: { write: (s) => { stdout += s; } },
       cwd: () => root,
@@ -596,6 +597,37 @@ check('no breadcrumb when project_dir is the same dir in a different spelling', 
     workspace: { current_dir: current, project_dir: current + path.sep }
   });
   assert(!text.includes('▸'), `trailing separator must not fake a move: ${text}`);
+
+  // Case-only difference: win32 filesystems are case-insensitive, so a case
+  // mismatch between the two stdin fields is the same dir, not a move.
+  // On POSIX differently-cased paths are genuinely distinct directories.
+  const cased = runStatusline({
+    model: { display_name: 'Claude' },
+    session_id: 'test-session',
+    workspace: { current_dir: current, project_dir: current.toUpperCase() }
+  }).text;
+  if (process.platform === 'win32') {
+    assert(!cased.includes('▸'), `case difference must not fake a move on win32: ${cased}`);
+  } else if (current !== current.toUpperCase()) {
+    assert(cased.includes('▸'), `distinct dirs must show the crumb on POSIX: ${cased}`);
+  }
+});
+
+check('width budget stage 1: dir name is ellipsised while the crumb stays full', () => {
+  const parent = makeTempDir();
+  const launch = path.join(parent, 'launchdir0');            // 10 chars — never needs shortening
+  const current = path.join(parent, '0123456789'.repeat(3)); // 30 chars — ellipsised first
+  fs.mkdirSync(launch);
+  fs.mkdirSync(current);
+
+  // model(60) + crumb(10+3) + dir(30) = 106 cols → stage 1 trims the dir name
+  // (→ 91) and stops: the launch name must survive in full.
+  const { text } = runStatusline({
+    model: { display_name: 'M'.repeat(60) },
+    session_id: 'test-session',
+    workspace: { current_dir: current, project_dir: launch }
+  });
+  assert(text.includes('launchdir0 ▸ 0123456…3456789'), `stage 1 keeps the crumb full: ${text}`);
 });
 
 check('cache TTL reads transcript_path from stdin, ignoring the current_dir slug', () => {

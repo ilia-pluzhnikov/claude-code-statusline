@@ -384,7 +384,11 @@ process.stdin.on('end', () => {
     // or no project_dir) nothing is added and the segment looks unchanged.
     // path.resolve normalizes trailing separators and relative forms so a mere
     // spelling difference between the two stdin fields doesn't fake a move.
-    const moved = launchDir && path.resolve(launchDir) !== path.resolve(dir);
+    // Windows filesystems are case-insensitive, so fold case there too; on
+    // POSIX differently-cased paths are genuinely distinct directories.
+    const normDir = (p) => process.platform === 'win32'
+      ? path.resolve(p).toLowerCase() : path.resolve(p);
+    const moved = launchDir && normDir(launchDir) !== normDir(dir);
     const launchRaw = moved ? path.basename(launchDir) : '';
     const buildDirSegment = (name, launch) => {
       let s = `\x1b[2m${launch ? `${launch} ▸ ` : ''}${name}\x1b[0m`;
