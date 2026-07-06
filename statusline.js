@@ -378,10 +378,12 @@ process.stdin.on('end', () => {
     // the session started, render "<launch> ▸ <current> (branch)" so it's clear
     // the session is rooted elsewhere than $PWD. On the happy path (dirs equal,
     // or no project_dir) nothing is added and the segment looks unchanged.
-    const launchRaw = (launchDir && launchDir !== dir) ? shorten(path.basename(launchDir)) : '';
-    const buildDirSegment = (name) => {
-      let s = launchRaw ? `\x1b[2m${launchRaw} ▸ \x1b[0m` : '';
-      s += `\x1b[2m${name}\x1b[0m`;
+    // path.resolve normalizes trailing separators and relative forms so a mere
+    // spelling difference between the two stdin fields doesn't fake a move.
+    const moved = launchDir && path.resolve(launchDir) !== path.resolve(dir);
+    const launchRaw = moved ? path.basename(launchDir) : '';
+    const buildDirSegment = (name, launch) => {
+      let s = `\x1b[2m${launch ? `${launch} ▸ ` : ''}${name}\x1b[0m`;
       if (branch) s += ` \x1b[36m(${branch})\x1b[0m`;
       else if (detachedSha) s += ` \x1b[31m(HEAD@${detachedSha})\x1b[0m`;
       return s;
@@ -389,18 +391,31 @@ process.stdin.on('end', () => {
     const effortSeg = effortCode ? ` \x1b[2m${effortCode}\x1b[0m` : '';
     const segments = [`\x1b[2m${model}\x1b[0m${effortSeg}`];
     const dirIndex = segments.length;
-    segments.push(buildDirSegment(dirRaw));
+    segments.push(buildDirSegment(dirRaw, launchRaw));
     if (gitInfo) segments.push(gitInfo.trim());
     if (ctx) segments.push(ctx.trim());
     if (cacheSegment) segments.push(cacheSegment);
     for (const lp of limitParts) segments.push(lp);
 
-    // Truncate dirname only if the line crosses 100 visible columns.
-    if (dirRaw !== dirShort) {
+    // Reclaim width only once the line crosses 100 visible columns, in stages:
+    // shorten the dir name, then the launch name, then drop the crumb entirely.
+    // Short lines keep both names in full.
+    const launchShort = shorten(launchRaw);
+    const fallbacks = [];
+    if (dirRaw !== dirShort) fallbacks.push([dirShort, launchRaw]);
+    if (launchRaw !== launchShort) fallbacks.push([dirShort, launchShort]);
+    if (launchRaw) fallbacks.push([dirShort, '']);
+    if (fallbacks.length > 0) {
       const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
-      let visible = -3; // " \u2502 " separator is 3 chars; pre-subtract one to undo over-counting.
-      for (const seg of segments) visible += 3 + stripAnsi(seg).length;
-      if (visible > 100) segments[dirIndex] = buildDirSegment(dirShort);
+      const width = () => {
+        let visible = -3; // " \u2502 " separator is 3 chars; pre-subtract one to undo over-counting.
+        for (const seg of segments) visible += 3 + stripAnsi(seg).length;
+        return visible;
+      };
+      for (const [name, launch] of fallbacks) {
+        if (width() <= 100) break;
+        segments[dirIndex] = buildDirSegment(name, launch);
+      }
     }
 
     process.stdout.write(segments.join(' \u2502 '));
