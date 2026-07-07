@@ -407,7 +407,13 @@ process.stdin.on('end', () => {
     if (cacheSegment) segments.push(cacheSegment);
     for (const lp of limitParts) segments.push(lp);
 
-    // Reclaim width only once the line crosses 100 visible columns, in stages:
+    // Width budget: Claude Code ≥2.1.153 exports the terminal size as
+    // COLUMNS/LINES before invoking the script (stdout is captured, so the
+    // script can't query the terminal itself). Absent or invalid → the
+    // historical fixed 100, so older builds and manual runs are unchanged.
+    const cols = Number.parseInt(process.env.COLUMNS, 10);
+    const widthBudget = cols > 0 ? cols : 100;
+    // Reclaim width only once the line crosses the budget, in stages:
     // shorten the dir name, then the launch name, then drop the crumb entirely.
     // Short lines keep both names in full.
     const launchShort = shorten(launchRaw);
@@ -423,7 +429,7 @@ process.stdin.on('end', () => {
         return visible;
       };
       for (const [name, launch] of fallbacks) {
-        if (width() <= 100) break;
+        if (width() <= widthBudget) break;
         segments[dirIndex] = buildDirSegment(name, launch);
       }
     }

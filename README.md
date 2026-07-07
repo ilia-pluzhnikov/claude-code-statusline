@@ -18,7 +18,9 @@ Op4.7:hg (1m) │ tweaks ▸ claude-…tusline (main) │ 3M 1? ↑2 push ⚠ md
 
 Each segment is color-coded (dim, bright, cyan, pink, green, yellow, orange, red) so the
 shape of the line itself communicates urgency at a glance. Labels are aggressively
-shortened so the line fits in a 100-column terminal.
+shortened so the line fits your terminal: the width budget is read from the `COLUMNS`
+environment variable that Claude Code exports to the script (v2.1.153+), with a fixed
+100-column fallback for older builds and manual runs.
 
 <img width="1280" height="636" alt="image" src="https://github.com/user-attachments/assets/c07f4e46-61cb-473e-99d6-d7b06a3fa3ec" />
 
@@ -30,8 +32,8 @@ shortened so the line fits in a 100-column terminal.
 |---------|---------|
 | `Op4.7 (1m)` | Current model, abbreviated: family (`Op`/`So`/`Ha`/`My`/`Fb`) glued to the version + context size (dim). `Opus 4.7 (1M context)` becomes `Op4.7 (1m)`, `Fable 5` becomes `Fb5`. Unrecognised model names are shown as-is. |
 | `Op4.7:hg` | Reasoning-effort tier as a lowercase code colon-glued to the model (same dim shade): `lo`/`md`/`hg`/`xhg`/`mx` for `low`/`medium`/`high`/`xhigh`/`max`. Reflects the live value (including mid-session `/effort` changes); the context size trails it — `Op4.7:hg (1m)`. Shown only on models that report `effort.level`; absent on models that don't support reasoning effort |
-| `claude-…tusline (main)` | Working directory basename (dim) + current branch in cyan; shows `(HEAD@<sha>)` in red for detached HEAD. The basename is trimmed to a 15-char `head…tail` middle ellipsis (7 chars each side) **only when the full status line would otherwise exceed 100 visible columns** — short lines keep the full name |
-| `tweaks ▸ statusline (main)` | When the working directory has moved away from where the session was launched (`workspace.project_dir` ≠ `workspace.current_dir`, e.g. after a `cd`), the launch dir basename is prepended as a dim `▸` breadcrumb so it's clear the session — and its transcript — is rooted elsewhere than `$PWD`. Hidden when the two match. Short lines keep both names in full; once the line would cross 100 visible columns, width is reclaimed in stages — the current-dir name is ellipsised, then the launch name, then the breadcrumb is dropped entirely |
+| `claude-…tusline (main)` | Working directory basename (dim) + current branch in cyan; shows `(HEAD@<sha>)` in red for detached HEAD. The basename is trimmed to a 15-char `head…tail` middle ellipsis (7 chars each side) **only when the full status line would otherwise exceed the width budget** (the terminal width from `COLUMNS`, 100 columns when it's absent) — short lines keep the full name |
+| `tweaks ▸ statusline (main)` | When the working directory has moved away from where the session was launched (`workspace.project_dir` ≠ `workspace.current_dir`, e.g. after a `cd`), the launch dir basename is prepended as a dim `▸` breadcrumb so it's clear the session — and its transcript — is rooted elsewhere than `$PWD`. Hidden when the two match. Short lines keep both names in full; once the line would cross the width budget, width is reclaimed in stages — the current-dir name is ellipsised, then the launch name, then the breadcrumb is dropped entirely |
 | `3M 1A 1D 1R 2? 1!` | Working tree status, bucketed by VS Code-style codes: `M` = modified, `A` = added/staged, `D` = deleted, `R` = renamed, `?` = untracked. All shown dim. `!` = unmerged conflict, rendered separately in **red** because it's the only one that blocks a commit. Empty buckets are hidden — clean repo shows nothing |
 | `↑2 push` / `↓1 pull` | Local branch is ahead/behind `origin/<branch>` |
 | `⚠ md drift` | `CLAUDE.md` ↔ `AGENTS.md` ↔ `GEMINI.md` are out of sync |

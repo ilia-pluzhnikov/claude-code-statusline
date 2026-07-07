@@ -17,13 +17,17 @@ function runStatusline(input, env = {}, execFileSyncStub = () => '') {
   let stdout = '';
   const stdin = new EventEmitter();
   stdin.setEncoding = () => {};
+  // The width budget reads COLUMNS; the ambient terminal's value must not
+  // leak into tests — only an explicit `env` override sets it.
+  const mergedEnv = { ...process.env, ...env };
+  if (!('COLUMNS' in env)) delete mergedEnv.COLUMNS;
   const context = {
     require: (name) => {
       if (name === 'child_process') return { execFileSync: execFileSyncStub };
       return require(name);
     },
     process: {
-      env: { ...process.env, ...env },
+      env: mergedEnv,
       platform: process.platform,
       stdin,
       stdout: { write: (s) => { stdout += s; } },
@@ -635,6 +639,39 @@ check('width budget stage 1: dir name is ellipsised while the crumb stays full',
     workspace: { current_dir: current, project_dir: launch }
   });
   assert(text.includes('launchdir0 ▸ 0123456…3456789'), `stage 1 keeps the crumb full: ${text}`);
+});
+
+check('width budget adapts to the COLUMNS env var, falling back to 100', () => {
+  const parent = makeTempDir();
+  const launch = path.join(parent, '0123456789'.repeat(3)); // 30 chars
+  const current = path.join(parent, 'work');
+  fs.mkdirSync(launch);
+  fs.mkdirSync(current);
+  const at = (modelLen, env) => runStatusline({
+    model: { display_name: 'M'.repeat(modelLen) }, // unrecognised → rendered as-is
+    session_id: 'test-session',
+    workspace: { current_dir: current, project_dir: launch }
+  }, env).text;
+
+  // Wide terminal: model(90) + full crumb = 130 cols — dropped at the default
+  // budget (see the staging test above), but COLUMNS=140 keeps it in full.
+  const wide = at(90, { COLUMNS: '140' });
+  assert(wide.includes('012345678901234567890123456789 ▸ work'), `COLUMNS=140 keeps the full crumb: ${wide}`);
+
+  // Narrow terminal: model(50) + full crumb = 90 cols — fits the default
+  // budget, but COLUMNS=60 walks all reclaim stages and drops the crumb.
+  const narrow = at(50, { COLUMNS: '60' });
+  assert(!narrow.includes('▸'), `COLUMNS=60 drops the crumb: ${narrow}`);
+  assert(narrow.includes('work'), `dir name kept: ${narrow}`);
+
+  // Invalid values fall back to the historical 100-column budget:
+  // 90 cols still fits, 130 cols still drops the crumb.
+  for (const bad of ['abc', '0', '-50', '']) {
+    const fits = at(50, { COLUMNS: bad });
+    assert(fits.includes('012345678901234567890123456789 ▸ work'), `COLUMNS=${JSON.stringify(bad)} → 100, 90 cols fit: ${fits}`);
+    const over = at(90, { COLUMNS: bad });
+    assert(!over.includes('▸'), `COLUMNS=${JSON.stringify(bad)} → 100, 130 cols drop the crumb: ${over}`);
+  }
 });
 
 check('cache TTL reads transcript_path from stdin, ignoring the current_dir slug', () => {
