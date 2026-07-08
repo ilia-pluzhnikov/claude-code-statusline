@@ -327,6 +327,23 @@ process.stdin.on('end', () => {
       }
     } catch (e) {}
 
+    // --- Output style ---
+    // Claude Code reports the active output style on stdin. Only a non-default
+    // style earns a segment ("hide on happy path") — its job is to remind that
+    // a style like Explanatory/Learning is still switched on: styles change how
+    // the assistant responds, are stored per scope (so they quietly differ
+    // between projects), and are easy to switch on and forget.
+    let styleSegment = '';
+    try {
+      const styleName = (data.output_style?.name || '').trim();
+      if (styleName && styleName.toLowerCase() !== 'default') {
+        const KNOWN_STYLES = { explanatory: 'expl', learning: 'learn' };
+        const key = styleName.toLowerCase();
+        const abbr = (Object.hasOwn(KNOWN_STYLES, key) ? KNOWN_STYLES[key] : '') || key.slice(0, 5);
+        styleSegment = `\x1b[2mstyle:\x1b[0m\x1b[35m${abbr}\x1b[0m`;
+      }
+    } catch (e) {}
+
     // --- Rate limits (subscription) ---
     const limitParts = [];
     const rl = data.rate_limits;
@@ -409,6 +426,7 @@ process.stdin.on('end', () => {
     const effortColor = Object.hasOwn(EFFORT_COLORS, effortCode || '') ? EFFORT_COLORS[effortCode] : '\x1b[2m';
     const effortSeg = effortCode ? `${effortColor}:${effortCode}\x1b[0m` : '';
     const segments = [`${modelColor}${model.base}\x1b[0m${effortSeg}${model.ctx ? `\x1b[2m${model.ctx}\x1b[0m` : ''}`];
+    if (styleSegment) segments.push(styleSegment);
     const dirIndex = segments.length;
     segments.push(buildDirSegment(dirRaw, launchRaw));
     if (gitInfo) segments.push(gitInfo.trim());

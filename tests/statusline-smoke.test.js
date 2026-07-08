@@ -744,6 +744,22 @@ check('model family renders with its cost-tier color', () => {
   assert(raw.startsWith('\x1b[1;31mFb5\x1b[0m\x1b[2m (1m)\x1b[0m'), JSON.stringify(raw.split(' │ ')[0]));
 });
 
+check('output style segment appears only for non-default styles', () => {
+  const dir = makeTempDir();
+  const expl = runStatusline(inputFor(dir, { output_style: { name: 'Explanatory' } }));
+  assert(expl.text.includes('style:expl'), expl.text);
+  const learn = runStatusline(inputFor(dir, { output_style: { name: 'Learning' } }));
+  assert(learn.text.includes('style:learn'), learn.text);
+  // Unknown custom styles abbreviate to their first five chars.
+  const custom = runStatusline(inputFor(dir, { output_style: { name: 'Concise-Pro' } }));
+  assert(custom.text.includes('style:conci'), custom.text);
+  // Default and absent styles stay invisible (hide on happy path).
+  const def = runStatusline(inputFor(dir, { output_style: { name: 'default' } }));
+  assert(!def.text.includes('style:'), def.text);
+  const none = runStatusline(inputFor(dir));
+  assert(!none.text.includes('style:'), none.text);
+});
+
 check('unknown effort level falls back to a dim code', () => {
   const dir = makeTempDir();
   const { raw, text } = runStatusline(inputFor(dir, {
