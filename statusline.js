@@ -30,7 +30,7 @@ process.stdin.on('end', () => {
         const ctxMatch = ctx.match(/(\d+)\s*([KMG])/i);
         if (ctxMatch) suffix = ` (${ctxMatch[1]}${ctxMatch[2].toLowerCase()})`;
       }
-      return { base: `${family}${version}`, ctx: suffix };
+      return { base: `${family}${version}`, ctx: suffix, family };
     };
     const model = shortModel(data.model?.display_name || 'Claude');
     // Reasoning-effort tier, present on stdin only for models that support it
@@ -398,8 +398,17 @@ process.stdin.on('end', () => {
       else if (detachedSha) s += ` \x1b[31m(HEAD@${detachedSha})\x1b[0m`;
       return s;
     };
-    const effortSeg = effortCode ? `:${effortCode}` : '';
-    const segments = [`\x1b[2m${model.base}${effortSeg}${model.ctx}\x1b[0m`];
+    // Cost-tier colors: model family and effort level both scale green (cheap)
+    // → bold red (most expensive), so the left edge of the line answers "how
+    // expensive is this session" the same way the context bar communicates
+    // urgency. Unknown families/levels keep the previous dim rendering.
+    // Own-key lookups so prototype keys fall through to dim, same as EFFORT_CODES.
+    const FAMILY_COLORS = { Ha: '\x1b[32m', So: '\x1b[33m', Op: '\x1b[38;2;255;140;0m', Fb: '\x1b[1;31m', My: '\x1b[1;31m' };
+    const EFFORT_COLORS = { lo: '\x1b[32m', md: '\x1b[33m', hg: '\x1b[38;2;255;140;0m', xhg: '\x1b[31m', mx: '\x1b[1;31m' };
+    const modelColor = Object.hasOwn(FAMILY_COLORS, model.family || '') ? FAMILY_COLORS[model.family] : '\x1b[2m';
+    const effortColor = Object.hasOwn(EFFORT_COLORS, effortCode || '') ? EFFORT_COLORS[effortCode] : '\x1b[2m';
+    const effortSeg = effortCode ? `${effortColor}:${effortCode}\x1b[0m` : '';
+    const segments = [`${modelColor}${model.base}\x1b[0m${effortSeg}${model.ctx ? `\x1b[2m${model.ctx}\x1b[0m` : ''}`];
     const dirIndex = segments.length;
     segments.push(buildDirSegment(dirRaw, launchRaw));
     if (gitInfo) segments.push(gitInfo.trim());
