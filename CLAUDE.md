@@ -37,6 +37,19 @@ echo '{"model":{"display_name":"claude-opus-4-7"},"workspace":{"current_dir":"."
 
 There is a smoke test suite at `tests/statusline-smoke.test.js`; run it with `node tests/statusline-smoke.test.js`. There is no CI yet.
 
+## Releasing
+
+Tag from `main`, cut a GitHub Release, then **attach `statusline.js` as a release asset** — don't skip this step. It's the single-file install users actually download, and GitHub's auto-generated "Source code" archives don't count toward download stats, so the attached asset is also the project's only permanent install-count metric (the `traffic/clones` API only keeps a rolling 14-day window).
+
+```bash
+git tag -a vX.Y.Z <sha> -m "<summary>"
+git push origin vX.Y.Z
+gh release create vX.Y.Z --title "..." --notes "..."
+gh release upload vX.Y.Z statusline.js   # ← the install artifact + download counter
+```
+
+The asset is a snapshot, so re-upload `statusline.js` on every release to keep the latest tag serving current code. Check the counter with `gh release view vX.Y.Z --json assets --jq '.assets[] | "\(.name): \(.downloadCount)"'`.
+
 ## License
 
 MIT — see `LICENSE`.
