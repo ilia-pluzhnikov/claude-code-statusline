@@ -119,14 +119,17 @@ check('effort tier renders as a lowercase :code glued to the model', () => {
   assert.strictEqual(none.text.split(' │ ')[0], 'Op4.8', `no effort: ${none.text}`);
 
   // Each documented level maps to its lowercase code, colon-glued to the model.
+  // The model family and the effort code carry cost-tier colors (Opus = orange;
+  // effort scales green → bold red).
   const map = { low: 'lo', medium: 'md', high: 'hg', xhigh: 'xhg', max: 'mx' };
+  const effortTints = { lo: '\x1b[32m', md: '\x1b[33m', hg: '\x1b[38;2;255;140;0m', xhg: '\x1b[31m', mx: '\x1b[1;31m' };
   for (const [level, code] of Object.entries(map)) {
     const { raw, text } = runStatusline(inputFor(dir, {
       model: { display_name: 'Opus 4.8' },
       effort: { level }
     }));
     assert.strictEqual(text.split(' │ ')[0], `Op4.8:${code}`, `${level}: ${text}`);
-    assert(raw.includes(`\x1b[2mOp4.8:${code}\x1b[0m`), `${level} shares the model's dim span: ${raw}`);
+    assert(raw.includes(`\x1b[38;2;255;140;0mOp4.8\x1b[0m${effortTints[code]}:${code}\x1b[0m`), `${level} cost-tier colors: ${raw}`);
   }
 
   // The context suffix stays at the end, after the effort code.
@@ -719,6 +722,52 @@ check('cache TTL falls back to project_dir slug (not current_dir) when transcrip
     }
   }, { CLAUDE_CONFIG_DIR: claude });
   assert(text.includes('cache 99% ↓1k +10 1h:'), text);
+});
+
+check('model family renders with its cost-tier color', () => {
+  const dir = makeTempDir();
+  const cases = [
+    ['Haiku 4.5', '\x1b[32mHa4.5\x1b[0m'],
+    ['Sonnet 4.6', '\x1b[33mSo4.6\x1b[0m'],
+    ['Opus 4.8', '\x1b[38;2;255;140;0mOp4.8\x1b[0m'],
+    ['Fable 5', '\x1b[1;31mFb5\x1b[0m'],
+    ['Mythos 5', '\x1b[1;31mMy5\x1b[0m'],
+    ['Claude', '\x1b[2mClaude\x1b[0m']  // unknown family keeps the dim span
+  ];
+  for (const [display_name, expected] of cases) {
+    const { raw } = runStatusline(inputFor(dir, { model: { display_name } }));
+    assert(raw.startsWith(expected), `${display_name}: ${JSON.stringify(raw.split(' │ ')[0])}`);
+  }
+
+  // The context-size suffix trails in its own dim span.
+  const { raw } = runStatusline(inputFor(dir, { model: { display_name: 'Fable 5 (1M context)' } }));
+  assert(raw.startsWith('\x1b[1;31mFb5\x1b[0m\x1b[2m (1m)\x1b[0m'), JSON.stringify(raw.split(' │ ')[0]));
+});
+
+check('output style segment appears only for non-default styles', () => {
+  const dir = makeTempDir();
+  const expl = runStatusline(inputFor(dir, { output_style: { name: 'Explanatory' } }));
+  assert(expl.text.includes('style:expl'), expl.text);
+  const learn = runStatusline(inputFor(dir, { output_style: { name: 'Learning' } }));
+  assert(learn.text.includes('style:learn'), learn.text);
+  // Unknown custom styles abbreviate to their first five chars.
+  const custom = runStatusline(inputFor(dir, { output_style: { name: 'Concise-Pro' } }));
+  assert(custom.text.includes('style:conci'), custom.text);
+  // Default and absent styles stay invisible (hide on happy path).
+  const def = runStatusline(inputFor(dir, { output_style: { name: 'default' } }));
+  assert(!def.text.includes('style:'), def.text);
+  const none = runStatusline(inputFor(dir));
+  assert(!none.text.includes('style:'), none.text);
+});
+
+check('unknown effort level falls back to a dim code', () => {
+  const dir = makeTempDir();
+  const { raw, text } = runStatusline(inputFor(dir, {
+    model: { display_name: 'Opus 4.8' },
+    effort: { level: 'ultra' }
+  }));
+  assert.strictEqual(text.split(' │ ')[0], 'Op4.8:ul', text);
+  assert(raw.includes('\x1b[2m:ul\x1b[0m'), JSON.stringify(raw.split(' │ ')[0]));
 });
 
 if (failures.length > 0) {
