@@ -121,15 +121,15 @@ check('effort tier renders as a lowercase :code glued to the model', () => {
   // Each documented level maps to its lowercase code, colon-glued to the model.
   // low..xhigh share the model's dim span. max — the most expensive tier, easy
   // to leave switched on after a one-off /effort max — gets a red code instead.
-  const map = { low: 'lo', medium: 'md', high: 'hg', xhigh: 'xhg', max: 'mx' };
+  const map = { low: 'lo', medium: 'md', high: 'hg', xhigh: 'xhg', max: 'max' };
   for (const [level, code] of Object.entries(map)) {
     const { raw, text } = runStatusline(inputFor(dir, {
       model: { display_name: 'Opus 4.8' },
       effort: { level }
     }));
     assert.strictEqual(text.split(' │ ')[0], `Op4.8:${code}`, `${level}: ${text}`);
-    if (code === 'mx') {
-      assert(raw.includes('\x1b[2mOp4.8\x1b[0m\x1b[31m:mx\x1b[0m'), `max effort is red, model stays dim: ${raw}`);
+    if (code === 'max') {
+      assert(raw.includes('\x1b[2mOp4.8\x1b[0m\x1b[31m:max\x1b[0m'), `max effort is red, model stays dim: ${raw}`);
     } else {
       assert(raw.includes(`\x1b[2mOp4.8:${code}\x1b[0m`), `${level} shares the model's dim span: ${raw}`);
     }
@@ -147,8 +147,8 @@ check('effort tier renders as a lowercase :code glued to the model', () => {
     model: { display_name: 'Opus 4.8 (1M context)' },
     effort: { level: 'max' }
   }));
-  assert.strictEqual(maxCtx.text.split(' │ ')[0], 'Op4.8:mx (1m)', `ctx after max: ${maxCtx.text}`);
-  assert(maxCtx.raw.includes('\x1b[31m:mx\x1b[0m\x1b[2m (1m)\x1b[0m'), `ctx dim after red max: ${maxCtx.raw}`);
+  assert.strictEqual(maxCtx.text.split(' │ ')[0], 'Op4.8:max (1m)', `ctx after max: ${maxCtx.text}`);
+  assert(maxCtx.raw.includes('\x1b[31m:max\x1b[0m\x1b[2m (1m)\x1b[0m'), `ctx dim after red max: ${maxCtx.raw}`);
 
   // Unknown future level falls back to its first two chars (never vanishes).
   const future = runStatusline(inputFor(dir, {

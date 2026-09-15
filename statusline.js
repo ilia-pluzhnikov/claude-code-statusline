@@ -38,7 +38,7 @@ process.stdin.on('end', () => {
     // to the model with a colon (Op4.8:hg). Unknown future levels fall back to
     // their first two chars rather than vanishing.
     const effortLevel = (data.effort?.level || '').toLowerCase();
-    const EFFORT_CODES = { low: 'lo', medium: 'md', high: 'hg', xhigh: 'xhg', max: 'mx' };
+    const EFFORT_CODES = { low: 'lo', medium: 'md', high: 'hg', xhigh: 'xhg', max: 'max' };
     // Own-key lookup only: prototype keys ('constructor', '__proto__') must fall
     // through to the generic fallback, not resolve to inherited members.
     const effortCode = (Object.hasOwn(EFFORT_CODES, effortLevel) ? EFFORT_CODES[effortLevel] : '')
@@ -426,8 +426,8 @@ process.stdin.on('end', () => {
     // one-off /effort max. Red flags it; low..xhigh stay dim so the happy path
     // is quiet — same discipline as the red `!` for conflicts in the git segment.
     const dim = (s) => `\x1b[2m${s}\x1b[0m`;
-    const modelSeg = effortCode === 'mx'
-      ? `${dim(model.base)}\x1b[31m:mx\x1b[0m${model.ctx ? dim(model.ctx) : ''}`
+    const modelSeg = effortCode === 'max'
+      ? `${dim(model.base)}\x1b[31m:max\x1b[0m${model.ctx ? dim(model.ctx) : ''}`
       : dim(`${model.base}${effortCode ? `:${effortCode}` : ''}${model.ctx}`);
     // --- Output style ---
     // A non-default style changes how Claude responds and is saved per project
