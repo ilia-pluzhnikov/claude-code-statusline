@@ -819,6 +819,33 @@ check('cache reset after compact comes from prompt_cache.caching_observed', () =
   assert(!text.includes('cache'), text);
 });
 
+check('output style renders as style:<code> right after the model, only when not default', () => {
+  const dir = makeTempDir();
+  // Built-in styles get fixed codes; the segment sits right after the model.
+  const codes = { Explanatory: 'expl', Learning: 'learn', Concise: 'conc', Proactive: 'proact' };
+  for (const [name, code] of Object.entries(codes)) {
+    const { raw, text } = runStatusline(inputFor(dir, { output_style: { name } }));
+    assert.strictEqual(text.split(' │ ')[1], `style:${code}`, `${name}: ${text}`);
+    assert(raw.includes(`\x1b[2mstyle:\x1b[0m\x1b[35m${code}\x1b[0m`), `${name} dim label + magenta code: ${raw}`);
+  }
+  // Names match case-insensitively (settings files carry either spelling).
+  const lower = runStatusline(inputFor(dir, { output_style: { name: 'explanatory' } }));
+  assert.strictEqual(lower.text.split(' │ ')[1], 'style:expl', lower.text);
+  // Custom styles: lowercased, cut to 7 chars.
+  const custom = runStatusline(inputFor(dir, { output_style: { name: 'Diagrams first' } }));
+  assert.strictEqual(custom.text.split(' │ ')[1], 'style:diagram', custom.text);
+  const short = runStatusline(inputFor(dir, { output_style: { name: 'caveman' } }));
+  assert.strictEqual(short.text.split(' │ ')[1], 'style:caveman', short.text);
+  // Default, blank or absent: hide on happy path.
+  for (const output_style of [{ name: 'default' }, { name: 'Default' }, { name: '  ' }, {}, undefined]) {
+    const { text } = runStatusline(inputFor(dir, output_style === undefined ? {} : { output_style }));
+    assert(!text.includes('style:'), `hidden for ${JSON.stringify(output_style)}: ${text}`);
+  }
+  // Prototype keys take the generic fallback, not inherited members.
+  const proto = runStatusline(inputFor(dir, { output_style: { name: 'constructor' } }));
+  assert.strictEqual(proto.text.split(' │ ')[1], 'style:constru', proto.text);
+});
+
 if (failures.length > 0) {
   console.error(failures.join('\n\n'));
   process.exitCode = 1;

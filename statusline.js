@@ -429,7 +429,23 @@ process.stdin.on('end', () => {
     const modelSeg = effortCode === 'mx'
       ? `${dim(model.base)}\x1b[31m:mx\x1b[0m${model.ctx ? dim(model.ctx) : ''}`
       : dim(`${model.base}${effortCode ? `:${effortCode}` : ''}${model.ctx}`);
+    // --- Output style ---
+    // A non-default style changes how Claude responds and is saved per project
+    // by /config, so it quietly differs between projects and is easy to forget.
+    // Hide on happy path: `default` (or no field) renders nothing. Built-in
+    // styles get a fixed code; custom names are lowercased and cut to 7 chars.
+    let styleSeg = '';
+    try {
+      const key = String(data.output_style?.name || '').trim().toLowerCase();
+      if (key && key !== 'default') {
+        const STYLE_CODES = { explanatory: 'expl', learning: 'learn', concise: 'conc', proactive: 'proact' };
+        // Own-key lookup only, same as EFFORT_CODES: prototype keys fall through.
+        const code = Object.hasOwn(STYLE_CODES, key) ? STYLE_CODES[key] : key.slice(0, 7);
+        styleSeg = `\x1b[2mstyle:\x1b[0m\x1b[35m${code}\x1b[0m`;
+      }
+    } catch (e) {}
     const segments = [modelSeg];
+    if (styleSeg) segments.push(styleSeg);
     const dirIndex = segments.length;
     segments.push(buildDirSegment(dirRaw, launchRaw));
     if (gitInfo) segments.push(gitInfo.trim());
