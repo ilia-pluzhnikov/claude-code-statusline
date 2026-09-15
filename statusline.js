@@ -190,8 +190,11 @@ process.stdin.on('end', () => {
 
     // --- Prompt cache state ---
     // Counters come from stdin (current_usage of the latest API call).
-    // TTL bucket and last-touch timestamp come from the transcript — stdin
-    // exposes neither ephemeral_1h vs ephemeral_5m nor a per-message timestamp.
+    // TTL bucket and expiry: Claude Code ≥2.1.251 hands them over on stdin as
+    // `prompt_cache` (ttl, expires_at, caching_observed) — no file I/O needed,
+    // and Claude Code re-runs the script when expires_at passes. Older builds
+    // expose neither, so fall back to scanning the transcript tail for the
+    // last cache write's ephemeral_* bucket and timestamp.
     let cacheSegment = '';
     try {
       const usage = data.context_window?.current_usage;
@@ -200,13 +203,29 @@ process.stdin.on('end', () => {
       const write = (usage && Number(usage.cache_creation_input_tokens)) || 0;
       const freshInput = (usage && Number(usage.input_tokens)) || 0;
 
-      let lastTouchTs = null;
+      let expiresAtMs = null; // when the cached prefix goes cold
       let lastWriteTtl = null;
       let hadCacheBefore = false;
 
+      // `caching_observed` is always a boolean on builds that emit the object,
+      // so its presence marks prompt_cache as authoritative: trust it (even
+      // when it says "cold") and skip the transcript entirely. Anything else
+      // (absent, or an unexpected shape) drops through to the transcript.
+      const pc = data.prompt_cache;
+      const pcKnown = !!pc && typeof pc === 'object' && typeof pc.caching_observed === 'boolean';
+      if (pcKnown) {
+        hadCacheBefore = pc.caching_observed;
+        const pcTtl = pc.ttl === '5m' || pc.ttl === '1h' ? pc.ttl : null;
+        const pcExpires = Number(pc.expires_at);
+        if (pcTtl && pc.expires_at !== null && Number.isFinite(pcExpires) && pcExpires > 0) {
+          lastWriteTtl = pcTtl;
+          expiresAtMs = pcExpires * 1000; // epoch seconds, like rate_limits.*.resets_at
+        }
+      }
+
       // Parse transcript when we need TTL/timestamp OR want to detect a /compact
       // reset (current_usage is null but earlier messages had cache activity).
-      if (session && (read > 0 || write > 0 || usageNull)) {
+      if (!pcKnown && session && (read > 0 || write > 0 || usageNull)) {
         try {
           // Prefer the transcript path Claude Code hands us directly. Rebuilding
           // it from a dir slug is fragile (drive letters, dots in hidden dirs)
@@ -245,6 +264,7 @@ process.stdin.on('end', () => {
             }
             const lines = content.split('\n').filter(Boolean);
 
+            let lastTouchTs = null;
             for (let i = lines.length - 1; i >= 0; i--) {
               try {
                 const rec = JSON.parse(lines[i]);
@@ -265,6 +285,9 @@ process.stdin.on('end', () => {
                 }
                 if (lastTouchTs && lastWriteTtl) break;
               } catch (e) {}
+            }
+            if (lastTouchTs && lastWriteTtl) {
+              expiresAtMs = lastTouchTs + (lastWriteTtl === '5m' ? 300000 : 3600000);
             }
           }
         } catch (e) {}
@@ -296,9 +319,9 @@ process.stdin.on('end', () => {
           const sym = read > 0 ? '+' : '↑';
           parts.push(`\x1b[33m${sym}${fmt(write)}\x1b[0m`);
         }
-        if (lastWriteTtl && lastTouchTs) {
+        if (lastWriteTtl && expiresAtMs) {
           const ttlMs = lastWriteTtl === '5m' ? 300000 : 3600000;
-          const remainingSec = (ttlMs - (Date.now() - lastTouchTs)) / 1000;
+          const remainingSec = (expiresAtMs - Date.now()) / 1000;
           const bucketColor = lastWriteTtl === '5m' ? '\x1b[33m' : '\x1b[2;36m';
           let suffix = `${bucketColor}${lastWriteTtl}\x1b[0m`;
           let timeStr;

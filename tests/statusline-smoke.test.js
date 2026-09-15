@@ -721,6 +721,90 @@ check('cache TTL falls back to project_dir slug (not current_dir) when transcrip
   assert(text.includes('cache 99% ↓1k +10 1h:'), text);
 });
 
+check('prompt_cache on stdin supplies the TTL countdown without a transcript', () => {
+  const dir = makeTempDir();
+  const claude = makeTempDir(); // empty: no transcript to fall back on
+  const nowSec = Math.floor(Date.now() / 1000);
+  const usage = { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, input_tokens: 0 };
+
+  let { text } = runStatusline(inputFor(dir, {
+    context_window: { current_usage: usage },
+    prompt_cache: { warm: true, caching_observed: true, ttl: '1h', expires_at: nowSec + 42 * 60 }
+  }), { CLAUDE_CONFIG_DIR: claude });
+  assert(text.includes('cache 99% ↓1k +10 1h:42m'), text);
+
+  ({ text } = runStatusline(inputFor(dir, {
+    context_window: { current_usage: usage },
+    prompt_cache: { warm: true, caching_observed: true, ttl: '5m', expires_at: nowSec + 90 }
+  }), { CLAUDE_CONFIG_DIR: claude }));
+  assert(text.includes('cache 99% ↓1k +10 5m:2m'), text);
+
+  // Already cold: countdown bottoms out at 0m rather than going negative.
+  ({ text } = runStatusline(inputFor(dir, {
+    context_window: { current_usage: usage },
+    prompt_cache: { warm: false, caching_observed: true, ttl: '1h', expires_at: nowSec - 600 }
+  }), { CLAUDE_CONFIG_DIR: claude }));
+  assert(text.includes('cache 99% ↓1k +10 1h:0m'), text);
+
+  // Cold with no expiry reported: counters render, countdown is omitted.
+  ({ text } = runStatusline(inputFor(dir, {
+    context_window: { current_usage: usage },
+    prompt_cache: { warm: false, caching_observed: true, ttl: '1h', expires_at: null }
+  }), { CLAUDE_CONFIG_DIR: claude }));
+  assert(text.includes('cache 99% ↓1k +10'), text);
+  assert(!/\b(?:1h|5m):/.test(text), text);
+});
+
+check('prompt_cache takes precedence over the transcript', () => {
+  const dir = makeTempDir();
+  const claude = makeTempDir();
+  const session = 'pc-precedence';
+  const nowSec = Math.floor(Date.now() / 1000);
+  // Transcript claims a fresh 5m write; stdin says a 1h cache with 30m left.
+  writeTranscript(claude, dir, session, [
+    JSON.stringify({ type: 'assistant', timestamp: new Date().toISOString(), message: { usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, cache_creation: { ephemeral_5m_input_tokens: 10 } } } })
+  ]);
+  const { text } = runStatusline(inputFor(dir, {
+    session_id: session,
+    context_window: { current_usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, input_tokens: 0 } },
+    prompt_cache: { warm: true, caching_observed: true, ttl: '1h', expires_at: nowSec + 30 * 60 }
+  }), { CLAUDE_CONFIG_DIR: claude });
+  assert(text.includes('cache 99% ↓1k +10 1h:30m'), text);
+  assert(!text.includes('5m:'), text);
+});
+
+check('prompt_cache with an unexpected shape falls back to the transcript', () => {
+  const dir = makeTempDir();
+  const claude = makeTempDir();
+  const session = 'pc-malformed';
+  writeTranscript(claude, dir, session, [
+    JSON.stringify({ type: 'assistant', timestamp: new Date(Date.now() - 60 * 1000).toISOString(), message: { usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, cache_creation: { ephemeral_1h_input_tokens: 10 } } } })
+  ]);
+  const { text } = runStatusline(inputFor(dir, {
+    session_id: session,
+    context_window: { current_usage: { cache_read_input_tokens: 1000, cache_creation_input_tokens: 10, input_tokens: 0 } },
+    prompt_cache: { ttl: '2h', expires_at: 'soon' } // no caching_observed → not authoritative
+  }), { CLAUDE_CONFIG_DIR: claude });
+  assert(text.includes('cache 99% ↓1k +10 1h:59m'), text);
+});
+
+check('cache reset after compact comes from prompt_cache.caching_observed', () => {
+  const dir = makeTempDir();
+  const claude = makeTempDir(); // no transcript
+  let { text } = runStatusline(inputFor(dir, {
+    context_window: { current_usage: null },
+    prompt_cache: { warm: false, caching_observed: true, ttl: '1h', expires_at: null }
+  }), { CLAUDE_CONFIG_DIR: claude });
+  assert(text.includes('cache:reset'), text);
+
+  // Nothing cached yet this session: stay silent.
+  ({ text } = runStatusline(inputFor(dir, {
+    context_window: { current_usage: null },
+    prompt_cache: { warm: false, caching_observed: false, ttl: '1h', expires_at: null }
+  }), { CLAUDE_CONFIG_DIR: claude }));
+  assert(!text.includes('cache'), text);
+});
+
 if (failures.length > 0) {
   console.error(failures.join('\n\n'));
   process.exitCode = 1;
