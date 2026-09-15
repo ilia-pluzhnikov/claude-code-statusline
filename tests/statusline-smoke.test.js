@@ -119,6 +119,8 @@ check('effort tier renders as a lowercase :code glued to the model', () => {
   assert.strictEqual(none.text.split(' │ ')[0], 'Op4.8', `no effort: ${none.text}`);
 
   // Each documented level maps to its lowercase code, colon-glued to the model.
+  // low..xhigh share the model's dim span. max — the most expensive tier, easy
+  // to leave switched on after a one-off /effort max — gets a red code instead.
   const map = { low: 'lo', medium: 'md', high: 'hg', xhigh: 'xhg', max: 'mx' };
   for (const [level, code] of Object.entries(map)) {
     const { raw, text } = runStatusline(inputFor(dir, {
@@ -126,7 +128,11 @@ check('effort tier renders as a lowercase :code glued to the model', () => {
       effort: { level }
     }));
     assert.strictEqual(text.split(' │ ')[0], `Op4.8:${code}`, `${level}: ${text}`);
-    assert(raw.includes(`\x1b[2mOp4.8:${code}\x1b[0m`), `${level} shares the model's dim span: ${raw}`);
+    if (code === 'mx') {
+      assert(raw.includes('\x1b[2mOp4.8\x1b[0m\x1b[31m:mx\x1b[0m'), `max effort is red, model stays dim: ${raw}`);
+    } else {
+      assert(raw.includes(`\x1b[2mOp4.8:${code}\x1b[0m`), `${level} shares the model's dim span: ${raw}`);
+    }
   }
 
   // The context suffix stays at the end, after the effort code.
@@ -135,6 +141,14 @@ check('effort tier renders as a lowercase :code glued to the model', () => {
     effort: { level: 'high' }
   }));
   assert.strictEqual(withCtx.text.split(' │ ')[0], 'Op4.8:hg (1m)', `ctx after effort: ${withCtx.text}`);
+
+  // After a red max code the context suffix goes back to dim.
+  const maxCtx = runStatusline(inputFor(dir, {
+    model: { display_name: 'Opus 4.8 (1M context)' },
+    effort: { level: 'max' }
+  }));
+  assert.strictEqual(maxCtx.text.split(' │ ')[0], 'Op4.8:mx (1m)', `ctx after max: ${maxCtx.text}`);
+  assert(maxCtx.raw.includes('\x1b[31m:mx\x1b[0m\x1b[2m (1m)\x1b[0m'), `ctx dim after red max: ${maxCtx.raw}`);
 
   // Unknown future level falls back to its first two chars (never vanishes).
   const future = runStatusline(inputFor(dir, {

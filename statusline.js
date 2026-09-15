@@ -421,8 +421,15 @@ process.stdin.on('end', () => {
       else if (detachedSha) s += ` \x1b[31m(HEAD@${detachedSha})\x1b[0m`;
       return s;
     };
-    const effortSeg = effortCode ? `:${effortCode}` : '';
-    const segments = [`\x1b[2m${model.base}${effortSeg}${model.ctx}\x1b[0m`];
+    // Effort shares the model's dim span, except `max`: the most expensive
+    // tier, rarely anyone's default and easy to leave switched on after a
+    // one-off /effort max. Red flags it; low..xhigh stay dim so the happy path
+    // is quiet — same discipline as the red `!` for conflicts in the git segment.
+    const dim = (s) => `\x1b[2m${s}\x1b[0m`;
+    const modelSeg = effortCode === 'mx'
+      ? `${dim(model.base)}\x1b[31m:mx\x1b[0m${model.ctx ? dim(model.ctx) : ''}`
+      : dim(`${model.base}${effortCode ? `:${effortCode}` : ''}${model.ctx}`);
+    const segments = [modelSeg];
     const dirIndex = segments.length;
     segments.push(buildDirSegment(dirRaw, launchRaw));
     if (gitInfo) segments.push(gitInfo.trim());
