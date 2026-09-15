@@ -441,7 +441,8 @@ process.stdin.on('end', () => {
         const STYLE_CODES = { explanatory: 'expl', learning: 'learn', concise: 'conc', proactive: 'proact' };
         // Own-key lookup only, same as EFFORT_CODES: prototype keys fall through.
         const code = Object.hasOwn(STYLE_CODES, key) ? STYLE_CODES[key] : key.slice(0, 7);
-        styleSeg = `\x1b[2mstyle:\x1b[0m\x1b[35m${code}\x1b[0m`;
+        // Same pink as a low context bar: this is state, not an alarm.
+        styleSeg = `\x1b[2mstl:\x1b[0m\x1b[38;2;255;125;218m${code}\x1b[0m`;
       }
     } catch (e) {}
     const segments = [modelSeg];
