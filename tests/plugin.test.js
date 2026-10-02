@@ -66,12 +66,13 @@ check('stage copies statusline.js and leaves an identical copy alone', () => {
 
 check('stage in hook mode prints nothing and never fails', () => {
   const dataDir = path.join(makeTempDir(), 'data');
-  const env = { ...process.env, CLAUDE_PLUGIN_ROOT: root, CLAUDE_PLUGIN_DATA: dataDir };
+  // Only the two variables the hook gets from Claude Code, not the whole environment.
+  const env = { CLAUDE_PLUGIN_ROOT: root, CLAUDE_PLUGIN_DATA: dataDir };
   const out = execFileSync(process.execPath, [stageScript], { encoding: 'utf8', env, input: '{}' });
   assert.strictEqual(out, '');
   assert(fs.existsSync(path.join(dataDir, 'statusline.js')));
 
-  const broken = { ...process.env, CLAUDE_PLUGIN_ROOT: path.join(dataDir, 'nowhere'), CLAUDE_PLUGIN_DATA: dataDir };
+  const broken = { CLAUDE_PLUGIN_ROOT: path.join(dataDir, 'nowhere'), CLAUDE_PLUGIN_DATA: dataDir };
   const r = spawnSync(process.execPath, [stageScript], { encoding: 'utf8', env: broken });
   assert.strictEqual(r.status, 0);
   assert.strictEqual(r.stdout, '');
