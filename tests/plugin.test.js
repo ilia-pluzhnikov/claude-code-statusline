@@ -125,6 +125,16 @@ check('apply rewrites statusLine alone and keeps the file style', () => {
   assert.strictEqual(fs.readFileSync(`${settingsPath}.bak`, 'utf8'), original, 'no-op apply replaced the backup');
 });
 
+check('a statusLine with the same keys in another order counts as already set', () => {
+  const settingsPath = path.join(makeTempDir(), 'settings.json');
+  const original = '{\n  "statusLine": {\n    "refreshInterval": 60,\n    "command": "node \\"/data/statusline.js\\"",\n    "type": "command"\n  }\n}\n';
+  fs.writeFileSync(settingsPath, original);
+  assert.strictEqual(configure('plan', '/data/statusline.js', settingsPath).out.isAlreadySet, true);
+  assert.strictEqual(configure('apply', '/data/statusline.js', settingsPath).out.isChanged, false);
+  assert.strictEqual(fs.readFileSync(settingsPath, 'utf8'), original);
+  assert(!fs.existsSync(`${settingsPath}.bak`), 'no-op apply wrote a backup');
+});
+
 check('apply creates a missing settings file without a backup', () => {
   const settingsPath = path.join(makeTempDir(), 'nested', 'settings.json');
   const r = configure('apply', '/data/statusline.js', settingsPath);

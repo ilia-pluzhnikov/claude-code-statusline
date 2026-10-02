@@ -53,21 +53,26 @@ function proposeStatusLine(current, script) {
   return proposed;
 }
 
-function plan(script, settingsPath) {
-  const { settings } = readSettings(settingsPath);
+// Key order doesn't matter to Claude Code, so it doesn't matter here either.
+function isSameStatusLine(current, proposed) {
+  if (!current || typeof current !== 'object' || Array.isArray(current)) return false;
+  const keys = Object.keys(proposed);
+  return Object.keys(current).length === keys.length && keys.every(k => current[k] === proposed[k]);
+}
+
+function planFrom(settings, script, settingsPath) {
   const current = settings.statusLine ?? null;
   const proposed = proposeStatusLine(current, script);
-  return {
-    settingsPath,
-    current,
-    proposed,
-    isAlreadySet: JSON.stringify(current) === JSON.stringify(proposed)
-  };
+  return { settingsPath, current, proposed, isAlreadySet: isSameStatusLine(current, proposed) };
+}
+
+function plan(script, settingsPath) {
+  return planFrom(readSettings(settingsPath).settings, script, settingsPath);
 }
 
 function apply(script, settingsPath) {
   const { raw, settings } = readSettings(settingsPath);
-  const result = plan(script, settingsPath);
+  const result = planFrom(settings, script, settingsPath);
   if (result.isAlreadySet) return { settingsPath, backupPath: null, statusLine: result.proposed, isChanged: false };
 
   let backupPath = null;
