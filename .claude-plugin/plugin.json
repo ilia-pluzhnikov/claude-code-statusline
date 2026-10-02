@@ -1,0 +1,13 @@
+{
+  "name": "statusline-for-claude-code",
+  "version": "1.3.0",
+  "description": "A dependency-free Node.js status line for Claude Code: model and effort, live git state, context window, prompt-cache state and rate limits on one color-coded line.",
+  "author": {
+    "name": "Ilia Pluzhnikov",
+    "url": "https://github.com/ilia-pluzhnikov"
+  },
+  "homepage": "https://github.com/ilia-pluzhnikov/claude-code-statusline",
+  "repository": "https://github.com/ilia-pluzhnikov/claude-code-statusline",
+  "license": "MIT",
+  "keywords": ["statusline", "status-line", "git", "context-window", "prompt-cache", "rate-limits"]
+}

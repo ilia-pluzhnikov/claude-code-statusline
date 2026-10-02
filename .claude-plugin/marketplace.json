@@ -1,0 +1,15 @@
+{
+  "name": "ilia-pluzhnikov",
+  "owner": {
+    "name": "Ilia Pluzhnikov",
+    "url": "https://github.com/ilia-pluzhnikov"
+  },
+  "description": "Claude Code plugins by Ilia Pluzhnikov",
+  "plugins": [
+    {
+      "name": "statusline-for-claude-code",
+      "source": "./",
+      "description": "A dependency-free Node.js status line for Claude Code: model and effort, live git state, context window, prompt-cache state and rate limits on one color-coded line."
+    }
+  ]
+}
