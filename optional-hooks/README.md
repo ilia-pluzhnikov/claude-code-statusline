@@ -1,87 +1,22 @@
 # Optional Hooks
 
-Three small Claude Code hooks that pair well with `statusline.js`. Each is
-independent — install one, two, or all three. None of them block your tools on
-failure (they all `process.exit(0)` on any error).
+A small Claude Code hook that pairs well with `statusline.js`. It never blocks
+your tools on failure (it `process.exit(0)`s on any error). It is not part of
+the plugin: install it by hand if you want it.
 
 | Hook | Event | Purpose |
 |------|-------|---------|
-| [`md-sync-check.js`](#md-sync-checkjs) | `SessionStart` | Warns Claude when `CLAUDE.md` ↔ `AGENTS.md` ↔ `GEMINI.md` drift apart |
-| [`sync-md.js`](#sync-mdjs) | `PostToolUse` (Edit/Write/MultiEdit) | Auto-mirrors `CLAUDE.md` into `AGENTS.md` and `GEMINI.md` |
 | [`github-sync-check.js`](#github-sync-checkjs) | `SessionStart` | Warns about uncommitted files and `origin` divergence |
 
-Recommended placement: drop the files directly into `~/.claude/hooks/` to keep
-them alongside `statusline.js`. The examples below use that flat layout.
+Recommended placement: drop the file directly into `~/.claude/hooks/` to keep
+it alongside `statusline.js`. The examples below use that flat layout.
 
----
-
-## `md-sync-check.js`
-
-**What it does.** Reads the three sibling files (`CLAUDE.md`, `AGENTS.md`,
-`GEMINI.md`) at session start, normalizes line endings and the per-file `Sync:`
-line, then compares both line count and content. On drift, it emits an
-`additionalContext` block that surfaces inside Claude's session-start system
-reminder — so the agent itself sees the warning and can act on it.
-
-**No-op when safe.** If any of the three files is missing, the hook exits silently.
-This means it never warns about projects that don't use the synced-trio convention.
-
-**Install.**
-
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/absolute/path/to/md-sync-check.js\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
----
-
-## `sync-md.js`
-
-**What it does.** Watches for `Edit`, `Write`, or `MultiEdit` calls on any file
-named `CLAUDE.md`. When one fires, it copies the new content into `AGENTS.md` and
-`GEMINI.md` in the same directory, swapping the `Sync:` line so each file references
-its two siblings correctly. Surfaces `✓ sync-md: CLAUDE.md → AGENTS.md + GEMINI.md`
-as a visible system message after a successful sync.
-
-**Safety.** Only fires when **both** `AGENTS.md` and `GEMINI.md` already exist next
-to the edited `CLAUDE.md` — projects that don't use the trio are untouched.
-
-**Pairs with `md-sync-check.js`** — that one *detects* drift, this one *prevents*
-it. With both installed, you edit `CLAUDE.md` and the other two stay in sync forever.
-
-**Install.**
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/absolute/path/to/sync-md.js\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+> Earlier releases also shipped `md-sync-check.js` and `sync-md.js`, which kept
+> `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` in sync. They were removed in v1.3.0:
+> Codex and Claude Code (v2.1.277+) read `AGENTS.md` directly, and Gemini CLI
+> does once its `context.fileName` setting lists it, so one `AGENTS.md` serves
+> all three. If you wired them up, remove their entries from `settings.json`
+> before updating your copy of this repo.
 
 ---
 
@@ -133,9 +68,9 @@ session stale — but you pay zero startup cost for it.
 
 ---
 
-## Combined snippet (all three + the statusline)
+## Combined snippet (the hook + the statusline)
 
-If you want everything wired up at once, here's the full block to merge into
+If you want both wired up at once, here's the full block to merge into
 `~/.claude/settings.json`:
 
 ```json
@@ -149,16 +84,7 @@ If you want everything wired up at once, here's the full block to merge into
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"/absolute/path/to/github-sync-check.js\"", "timeout": 10 },
-          { "type": "command", "command": "node \"/absolute/path/to/md-sync-check.js\"",      "timeout": 5  }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          { "type": "command", "command": "node \"/absolute/path/to/sync-md.js\"", "timeout": 5 }
+          { "type": "command", "command": "node \"/absolute/path/to/github-sync-check.js\"", "timeout": 10 }
         ]
       }
     ]

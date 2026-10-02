@@ -13,7 +13,7 @@ No dependencies. No build step. Works on macOS, Linux, and Windows.
 ## Preview
 
 ```
-Op4.7:hg (1m) │ tweaks ▸ claude-…tusline (main) │ 3M 1? ↑2 push ⚠ md drift │ ██░░░ 480k/1M │ cache 87% ↓75k +360 1h:42m │ 5h:35%(2h15m) │ 7d:42%(4d)
+Op4.7:hg (1m) │ tweaks ▸ claude-…tusline (main) │ 3M 1? ↑2 push │ ██░░░ 480k/1M │ cache 87% ↓75k +360 1h:42m │ 5h:35%(2h15m) │ 7d:42%(4d)
 ```
 
 Each segment is color-coded (dim, bright, cyan, pink, green, yellow, orange, red) so the
@@ -37,7 +37,6 @@ environment variable that Claude Code exports to the script (v2.1.153+), with a 
 | `tweaks ▸ statusline (main)` | When the working directory has moved away from where the session was launched (`workspace.project_dir` ≠ `workspace.current_dir`, e.g. after a `cd`), the launch dir basename is prepended as a dim `▸` breadcrumb so it's clear the session — and its transcript — is rooted elsewhere than `$PWD`. Hidden when the two match. Short lines keep both names in full; once the line would cross the width budget, width is reclaimed in stages — the current-dir name is ellipsised, then the launch name, then the breadcrumb is dropped entirely |
 | `3M 1A 1D 1R 2? 1!` | Working tree status, bucketed by VS Code-style codes: `M` = modified, `A` = added/staged, `D` = deleted, `R` = renamed, `?` = untracked. All shown dim. `!` = unmerged conflict, rendered separately in **red** because it's the only one that blocks a commit. Empty buckets are hidden — clean repo shows nothing |
 | `↑2 push` / `↓1 pull` | Local branch is ahead/behind `origin/<branch>` |
-| `⚠ md drift` | `CLAUDE.md` ↔ `AGENTS.md` ↔ `GEMINI.md` are out of sync |
 | `██░░░ 480k/1M` | Context window usage — 5-cell bar with half-block precision (`█▌░`, ~10% per step in 5 cells). When Claude Code provides absolute context counters, the bar is driven by `total_input_tokens / context_window_size` and the segment appends the raw counts (for example `480k/1M`). When only `remaining_percentage` is available, the bar falls back to `100 - remaining` |
 | `cache 87% ↓75k +360 1h:42m` | Prompt cache state. Read/write/input counters come from stdin `context_window.current_usage`. The TTL bucket (`1h`/`5m`) and countdown come from stdin `prompt_cache.ttl` / `expires_at` on Claude Code ≥2.1.251; older builds fall back to the session transcript for the last cache write's bucket and timestamp. Hit ratio is `read / (input + write + read)`: `≥90%` bold green, `≥75%` green, `≥50%` yellow, below that orange, and `0%` bold red for a full miss/invalidation. `↓` means tokens read from cache, `+` or `↑` means tokens written. After `/compact`, `cache:reset` appears while stdin `current_usage` is null but the session has already seen cache activity (`prompt_cache.caching_observed` on ≥2.1.251, the transcript on older builds) |
 | `5h:35%(2h15m)` | 5-hour rate limit usage + reset countdown (`Xh Ym` / `Mm`) |
@@ -59,6 +58,45 @@ degrades and Anthropic's long-context pricing tier kicks in around there —
 so a 1M-context session at 250k/1M (25% used) shouldn't render as cozy pink.
 
 ## Installation
+
+### As a Claude Code plugin
+
+```
+/plugin marketplace add ilia-pluzhnikov/claude-code-statusline
+/plugin install statusline-for-claude-code@ilia-pluzhnikov
+/statusline-for-claude-code:setup
+```
+
+Claude Code doesn't let a plugin switch the status line on by itself (from a
+plugin's settings it applies only `agent` and `subagentStatusLine`), so the
+plugin needs one setup step. `/statusline-for-claude-code:setup` shows your current
+`statusLine` and the one it proposes, and only after you confirm writes that
+single key to `~/.claude/settings.json`, keeping a backup in
+`settings.json.bak`. From then on plugin updates reach the status line without
+running setup again: a `SessionStart` hook keeps a copy of `statusline.js` in
+the plugin's data folder current, and the setting points at that copy.
+
+To remove it, restore `settings.json.bak` (or delete the `statusLine` key),
+then uninstall the plugin.
+
+#### What the plugin runs, reads and writes
+
+- **`SessionStart` hook** (`scripts/stage-statusline.js`): copies the plugin's
+  `statusline.js` into its data folder, `~/.claude/plugins/data/<plugin-id>/`,
+  when the copy is missing or differs. Nothing else.
+- **`/statusline-for-claude-code:setup`** (`scripts/configure-statusline.js`): reads
+  `~/.claude/settings.json` and, after your confirmation, rewrites its
+  `statusLine` key and saves the previous file as `settings.json.bak`.
+- **The status line itself** (`statusline.js`): reads the JSON Claude Code passes
+  on stdin; runs local, read-only `git` commands (`status`, `branch`,
+  `rev-parse`, `rev-list`) in the working directory with a 1 s timeout; on
+  Claude Code builds older than 2.1.251 reads the last 16 KB of the session
+  transcript for the prompt-cache timer; writes `claude-ctx-<session_id>.json`
+  to the system temp folder.
+- **No network.** Nothing is fetched or sent anywhere, and no personal data is
+  stored. The optional companion hook below is not part of the plugin.
+
+### Manually
 
 1. **Clone or download** this repo.
 2. **Drop `statusline.js`** anywhere you like. The natural location is `~/.claude/hooks/statusline.js`.
@@ -85,40 +123,20 @@ workspace, session, context window, rate limits) and writes a single ANSI-colour
 line to stdout. It exits silently on any error so a broken statusline never blocks your
 session.
 
-## Optional companion hooks
+## Optional companion hook
 
-### Why MD sync matters
+[`optional-hooks/github-sync-check.js`](./optional-hooks/) is a `SessionStart`
+hook that warns about uncommitted files and tells you when your branch has drifted
+from `origin/<branch>`. It runs `git fetch` in the background so the next session
+has fresh data. It isn't part of the plugin and isn't required for the statusline
+itself; see [`optional-hooks/README.md`](./optional-hooks/README.md) to install it
+by hand.
 
-Different coding agents read different memory files from your project root:
-
-- **Claude Code** reads `CLAUDE.md`
-- **OpenAI Codex** (and most agent-spec compliant tools) read `AGENTS.md`
-- **Gemini CLI** reads `GEMINI.md`
-
-If you use more than one agent on the same project, all three need to contain the
-same project context — coding conventions, deploy instructions, "don't touch X"
-rules. The moment they drift apart, one agent is following outdated rules while the
-others aren't, and you start getting inconsistent behavior across tools without
-knowing why. Worse: you update one file, forget the other two, and a week later a
-different agent confidently violates a rule you thought you'd written down.
-
-The drift detector turns this from an invisible bug into a visible one. The
-`sync-md.js` hook below goes further and removes the manual work entirely: edit
-`CLAUDE.md` and the other two regenerate from it automatically.
-
-### The hooks
-
-The MD-drift detector inside `statusline.js` only lights up if your project actually
-keeps `CLAUDE.md`, `AGENTS.md`, and `GEMINI.md` as a synchronized trio. The
-[`optional-hooks/`](./optional-hooks/) folder contains three small hooks that make
-the rest of the experience whole:
-
-- **`md-sync-check.js`** — `SessionStart` hook. Warns Claude (via `additionalContext`) when the trio drifts.
-- **`sync-md.js`** — `PostToolUse` hook. When you `Edit`/`Write` `CLAUDE.md`, it auto-mirrors the content into `AGENTS.md` and `GEMINI.md`, rewriting the per-file `Sync:` line.
-- **`github-sync-check.js`** — `SessionStart` hook. Warns about uncommitted files and tells you when your branch has drifted from `origin/<branch>`. Runs `git fetch` in the background so the next session has fresh data.
-
-See [`optional-hooks/README.md`](./optional-hooks/README.md) for installation snippets.
-None of them are required for the statusline itself to work.
+The `md-sync-check.js` and `sync-md.js` hooks and the `⚠ md drift` segment, which
+kept `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` in sync, were removed in v1.3.0:
+Codex and Claude Code (v2.1.277+) read `AGENTS.md` directly, and Gemini CLI does
+once its `context.fileName` setting lists it, so a single `AGENTS.md` serves all
+three.
 
 ## How it stays fast
 
@@ -164,5 +182,5 @@ MIT — see [LICENSE](./LICENSE).
 
 ## Credits
 
-Built by [Ilya Pluzhnikov](https://github.com/ilia-pluzhnikov).
+Built by [Ilia Pluzhnikov](https://github.com/ilia-pluzhnikov).
 PRs and forks welcome.

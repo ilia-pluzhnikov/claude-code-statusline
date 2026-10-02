@@ -166,23 +166,6 @@ process.stdin.on('end', () => {
         if (ahead > 0) parts.push(`\x1b[33m\u2191${ahead} push\x1b[0m`);
       }
 
-      // MD sync check: drift between CLAUDE.md ↔ AGENTS.md ↔ GEMINI.md
-      try {
-        const claudeMd = path.join(dir, 'CLAUDE.md');
-        const agentsMd = path.join(dir, 'AGENTS.md');
-        const geminiMd = path.join(dir, 'GEMINI.md');
-        if (fs.existsSync(claudeMd) && fs.existsSync(agentsMd) && fs.existsSync(geminiMd)) {
-          const SYNC_LINE_RE = /^> \*\*(?:Синхронизация|Sync):\*\*.*$/m;
-          const norm = (p) => fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
-          const cs = norm(claudeMd).replace(SYNC_LINE_RE, '');
-          const as = norm(agentsMd).replace(SYNC_LINE_RE, '');
-          const gs = norm(geminiMd).replace(SYNC_LINE_RE, '');
-          if (cs !== as || cs !== gs) {
-            parts.push('\x1b[31m\u26A0 md drift\x1b[0m');
-          }
-        }
-      } catch (e) {}
-
       if (parts.length > 0) {
         gitInfo = ' ' + parts.join(' ');
       }
