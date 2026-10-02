@@ -388,8 +388,9 @@ process.stdin.on('end', () => {
     const dirShort = shorten(dirRaw);
     // Launch-dir breadcrumb: only when the working dir has moved away from where
     // the session started, render "<launch> ▸ <current> (branch)" so it's clear
-    // the session is rooted elsewhere than $PWD. On the happy path (dirs equal,
-    // or no project_dir) nothing is added and the segment looks unchanged.
+    // the session is rooted elsewhere than the current directory. On the happy
+    // path (dirs equal, or no project_dir) nothing is added and the segment
+    // looks unchanged.
     // path.resolve normalizes trailing separators and relative forms so a mere
     // spelling difference between the two stdin fields doesn't fake a move.
     // Windows filesystems are case-insensitive, so fold case there too; on
