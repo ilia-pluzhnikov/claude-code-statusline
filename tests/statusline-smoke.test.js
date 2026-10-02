@@ -17,10 +17,9 @@ function runStatusline(input, env = {}, execFileSyncStub = () => '') {
   let stdout = '';
   const stdin = new EventEmitter();
   stdin.setEncoding = () => {};
-  // The width budget reads COLUMNS; the ambient terminal's value must not
-  // leak into tests — only an explicit `env` override sets it.
-  const mergedEnv = { ...process.env, ...env };
-  if (!('COLUMNS' in env)) delete mergedEnv.COLUMNS;
+  // Only the variables a test passes: the ambient terminal's COLUMNS or
+  // CLAUDE_CONFIG_DIR must not leak into tests.
+  const mergedEnv = { ...env };
   const context = {
     require: (name) => {
       if (name === 'child_process') return { execFileSync: execFileSyncStub };
