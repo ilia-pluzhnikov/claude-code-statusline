@@ -74,7 +74,8 @@ plugin needs one setup step. `/statusline-for-claude-code:setup` shows your curr
 single key to `~/.claude/settings.json`, keeping a backup in
 `settings.json.bak`. From then on plugin updates reach the status line without
 running setup again: a `SessionStart` hook keeps a copy of `statusline.js` in
-the plugin's data folder current, and the setting points at that copy.
+the plugin's data folder current, and the setting points at that copy. Until
+setup is done, that hook reminds you about it once, at the start of a session.
 
 To remove it, restore `settings.json.bak` (or delete the `statusLine` key),
 then uninstall the plugin.
@@ -83,7 +84,10 @@ then uninstall the plugin.
 
 - **`SessionStart` hook** (`scripts/stage-statusline.js`): copies the plugin's
   `statusline.js` into its data folder, `~/.claude/plugins/data/<plugin-id>/`,
-  when the copy is missing or differs. Nothing else.
+  when the copy is missing or differs. If the `statusLine` key in
+  `~/.claude/settings.json` doesn't run that copy yet, it shows a one-time
+  reminder to run setup and leaves a `setup-hint-shown` marker file in the same
+  folder. It writes nothing outside that folder.
 - **`/statusline-for-claude-code:setup`** (`scripts/configure-statusline.js`): reads
   `~/.claude/settings.json` and, after your confirmation, rewrites its
   `statusLine` key and saves the previous file as `settings.json.bak`.

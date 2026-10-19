@@ -64,18 +64,52 @@ check('stage copies statusline.js and leaves an identical copy alone', () => {
   assert(fs.readFileSync(dest).equals(fs.readFileSync(path.join(root, 'statusline.js'))), 'stale copy kept');
 });
 
-check('stage in hook mode prints nothing and never fails', () => {
-  const dataDir = path.join(makeTempDir(), 'data');
-  // Only the two variables the hook gets from Claude Code, not the whole environment.
-  const env = { CLAUDE_PLUGIN_ROOT: root, CLAUDE_PLUGIN_DATA: dataDir };
-  const out = execFileSync(process.execPath, [stageScript], { encoding: 'utf8', env, input: '{}' });
-  assert.strictEqual(out, '');
-  assert(fs.existsSync(path.join(dataDir, 'statusline.js')));
+// Runs the script the way the SessionStart hook does: no arguments, only the
+// two plugin variables plus a config dir, so the user's real settings.json
+// never leaks in.
+function runHook(dataDir, configDir, pluginRoot = root) {
+  const env = { CLAUDE_PLUGIN_ROOT: pluginRoot, CLAUDE_PLUGIN_DATA: dataDir, CLAUDE_CONFIG_DIR: configDir };
+  return spawnSync(process.execPath, [stageScript], { encoding: 'utf8', env, input: '{}' });
+}
 
-  const broken = { CLAUDE_PLUGIN_ROOT: path.join(dataDir, 'nowhere'), CLAUDE_PLUGIN_DATA: dataDir };
-  const r = spawnSync(process.execPath, [stageScript], { encoding: 'utf8', env: broken });
-  assert.strictEqual(r.status, 0);
+check('hook mode stages the copy and shows the setup hint once', () => {
+  const tmp = makeTempDir();
+  const dataDir = path.join(tmp, 'data');
+  const r = runHook(dataDir, tmp);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert(fs.existsSync(path.join(dataDir, 'statusline.js')));
+  // One JSON object with systemMessage: shown to the user, not added to Claude's context.
+  const out = JSON.parse(r.stdout);
+  assert.deepStrictEqual(Object.keys(out), ['systemMessage']);
+  assert.match(out.systemMessage, /\/statusline-for-claude-code:setup/);
+
+  const again = runHook(dataDir, tmp);
+  assert.strictEqual(again.status, 0, again.stderr);
+  assert.strictEqual(again.stdout, '', 'hint shown twice');
+});
+
+check('hook mode stays silent once statusLine points at the staged copy', () => {
+  const tmp = makeTempDir();
+  const dataDir = path.join(tmp, 'data');
+  const script = path.join(dataDir, 'statusline.js').replace(/\\/g, '/');
+  const statusLine = { type: 'command', command: `node "${script}"`, refreshInterval: 60 };
+  fs.writeFileSync(path.join(tmp, 'settings.json'), JSON.stringify({ statusLine }));
+  const r = runHook(dataDir, tmp);
+  assert.strictEqual(r.status, 0, r.stderr);
   assert.strictEqual(r.stdout, '');
+});
+
+check('hook mode never fails and stays silent on errors', () => {
+  const tmp = makeTempDir();
+  const dataDir = path.join(tmp, 'data');
+  const broken = runHook(dataDir, tmp, path.join(tmp, 'nowhere'));
+  assert.strictEqual(broken.status, 0);
+  assert.strictEqual(broken.stdout, '');
+
+  fs.writeFileSync(path.join(tmp, 'settings.json'), '{ "model": "opus", }');
+  const invalid = runHook(dataDir, tmp);
+  assert.strictEqual(invalid.status, 0);
+  assert.strictEqual(invalid.stdout, '');
 });
 
 check('plan writes nothing and proposes the staged script', () => {

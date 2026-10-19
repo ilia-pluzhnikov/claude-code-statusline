@@ -104,4 +104,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { plan, apply, proposeStatusLine };
+module.exports = { plan, apply, proposeStatusLine, defaultSettingsPath, readSettings };

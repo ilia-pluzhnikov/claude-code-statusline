@@ -9,7 +9,7 @@ This file is the project's only agent instructions file: Codex and Claude Code (
 - `statusline.js` — entry point. Reads JSON from stdin (model, workspace, session_id, context_window, rate_limits) and writes one ANSI-coloured line to stdout.
 - `optional-hooks/github-sync-check.js` — SessionStart git status + cached `origin` divergence + background fetch for next session.
 - `.claude-plugin/plugin.json` + `marketplace.json` — the repo root is also the Claude Code plugin `statusline-for-claude-code` and a one-plugin marketplace `ilia-pluzhnikov`. The optional hook is not part of the plugin.
-- `hooks/hooks.json` → `scripts/stage-statusline.js` — plugin SessionStart hook: copies `statusline.js` into `CLAUDE_PLUGIN_DATA`, the path that survives plugin updates.
+- `hooks/hooks.json` → `scripts/stage-statusline.js` — plugin SessionStart hook: copies `statusline.js` into `CLAUDE_PLUGIN_DATA`, the path that survives plugin updates, and until setup is done shows a one-time hint about it (JSON `systemMessage`, so it reaches the user and not Claude's context).
 - `commands/setup.md` → `scripts/configure-statusline.js` — `/statusline-for-claude-code:setup`: previews, then writes the `statusLine` key. A plugin can't set `statusLine` itself; Claude Code applies only `agent` and `subagentStatusLine` from plugin settings.
 
 ## Rules for contributors (and AI agents)
