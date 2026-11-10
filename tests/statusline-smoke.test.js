@@ -845,6 +845,46 @@ check('output style renders as stl:<code> right after the model, only when not d
   const proto = runStatusline(inputFor(dir, { output_style: { name: 'constructor' } }));
   assert.strictEqual(proto.text.split(' │ ')[1], 'stl:constru', proto.text);
 });
+check('cache diagnostics surface unexpected misses and the cold-start cost', () => {
+  const dir = makeTempDir();
+  const nowSec = Math.floor(Date.now() / 1000);
+  const usage = { cache_read_input_tokens: 341325, cache_creation_input_tokens: 304, input_tokens: 2 };
+
+  // Dominant cause wins the label; counts render as "misses/requests".
+  let { text } = runStatusline(inputFor(dir, {
+    context_window: { current_usage: usage },
+    prompt_cache: {
+      warm: true, caching_observed: true, ttl: '5m', expires_at: nowSec + 200,
+      requests: 348, misses: 7, recache_tokens_if_cold: 341631,
+      miss_causes: { ttl_expired_5m: 6, tools_changed: 1 }
+    }
+  }));
+  assert(text.includes('✗7/348 5mttl'), text);
+  assert(text.includes('~342kcold'), text);
+
+  // Zero misses and a warm cache: nothing new, the segment stays as it was.
+  ({ text } = runStatusline(inputFor(dir, {
+    context_window: { current_usage: usage },
+    prompt_cache: {
+      warm: true, caching_observed: true, ttl: '5m', expires_at: nowSec + 200,
+      requests: 348, misses: 0, recache_tokens_if_cold: 341631, miss_causes: {}
+    }
+  })));
+  assert(!text.includes('✗'), text);
+  assert(!text.includes('cold'), text);
+
+  // An unrecognised cause slug drops the label instead of guessing at one.
+  ({ text } = runStatusline(inputFor(dir, {
+    context_window: { current_usage: usage },
+    prompt_cache: {
+      warm: true, caching_observed: true, ttl: '5m', expires_at: nowSec + 200,
+      requests: 5, misses: 2, miss_causes: { some_future_reason: 2 }
+    }
+  })));
+  assert(text.includes('✗2/5'), text);
+  assert(!text.includes('some_future_reason'), text);
+});
+
 
 if (failures.length > 0) {
   console.error(failures.join('\n\n'));

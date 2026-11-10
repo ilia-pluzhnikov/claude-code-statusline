@@ -172,6 +172,30 @@ process.stdin.on('end', () => {
     } catch (e) {}
 
     // --- Prompt cache state ---
+    // Short labels for the CLI's `miss_causes` slugs. The CLI ships a verbose
+    // English map of its own, but a one-line panel can spend at most a few
+    // characters per cause, so these are deliberately terse. Unknown slugs fall
+    // through to no label rather than a guess.
+    const PC_MISS_LABELS = {
+      system_prompt_changed: 'sys',
+      tools_changed: 'tools',
+      model_changed: 'model',
+      fast_mode_changed: 'fast',
+      cache_scope_or_ttl_changed: 'ttl',
+      betas_changed: 'beta',
+      effort_changed: 'effort',
+      thinking_mode_changed: 'think',
+      thinking_display_changed: 'display',
+      auto_mode_changed: 'auto',
+      overage_changed: 'limit',
+      extra_body_changed: 'body',
+      defer_loading_changed: 'defer',
+      messages_rewritten: 'rewrite',
+      ttl_expired_5m: '5mttl',
+      ttl_expired_1h: '1httl',
+      likely_server_side: 'server',
+      unknown: '?'
+    };
     // Counters come from stdin (current_usage of the latest API call).
     // TTL bucket and expiry: Claude Code ≥2.1.251 hands them over on stdin as
     // `prompt_cache` (ttl, expires_at, caching_observed) — no file I/O needed,
@@ -189,6 +213,14 @@ process.stdin.on('end', () => {
       let expiresAtMs = null; // when the cached prefix goes cold
       let lastWriteTtl = null;
       let hadCacheBefore = false;
+      // Session-level cache diagnostics. `misses` counts *unexpected* prefix
+      // drops only (the CLI files expected ones, e.g. after /compact, under
+      // expected_rebuilds), so a non-zero count is worth showing.
+      let pcMisses = 0;
+      let pcRequests = 0;
+      let pcMissCause = '';
+      let pcRecache = 0;
+      let pcCold = false;
 
       // `caching_observed` is always a boolean on builds that emit the object,
       // so its presence marks prompt_cache as authoritative: trust it (even
@@ -203,6 +235,25 @@ process.stdin.on('end', () => {
         if (pcTtl && pc.expires_at !== null && Number.isFinite(pcExpires) && pcExpires > 0) {
           lastWriteTtl = pcTtl;
           expiresAtMs = pcExpires * 1000; // epoch seconds, like rate_limits.*.resets_at
+        }
+        // Diagnostics ride along in the same object but are newer: read each
+        // field defensively so an older build that ships only ttl/expires_at
+        // still renders exactly as before.
+        const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+        pcMisses = num(pc.misses);
+        pcRequests = num(pc.requests);
+        pcRecache = num(pc.recache_tokens_if_cold);
+        pcCold = pc.warm === false;
+        // The dominant cause only — a per-cause breakdown would not fit a
+        // one-line panel. Keys are fixed slugs from the CLI, shortened here.
+        const causes = pc.miss_causes && typeof pc.miss_causes === 'object' ? pc.miss_causes : null;
+        if (causes) {
+          let best = '', bestN = 0;
+          for (const [k, v] of Object.entries(causes)) {
+            const n = num(v);
+            if (n > bestN) { bestN = n; best = k; }
+          }
+          pcMissCause = best;
         }
       }
 
@@ -324,6 +375,20 @@ process.stdin.on('end', () => {
           else countColor = '\x1b[2m';
           suffix += `${countColor}:${timeStr}\x1b[0m`;
           parts.push(suffix);
+        }
+        // Cache-health diagnostics: only for unexpected drops (the CLI counts
+        // expected rebuilds separately), and only once there is something to
+        // report — a clean session keeps the line unchanged.
+        if (pcMisses > 0) {
+          const cause = pcMissCause && PC_MISS_LABELS[pcMissCause]
+            ? ` ${PC_MISS_LABELS[pcMissCause]}`
+            : '';
+          const of = pcRequests > 0 ? `/${pcRequests}` : '';
+          parts.push(`\x1b[1;31m✗${pcMisses}${of}${cause}\x1b[0m`);
+        }
+        // What the next uncached request would cost in cache-write tokens.
+        if (pcRecache > 0 && (pcCold || pcMisses > 0)) {
+          parts.push(`\x1b[2m~${fmt(pcRecache)}cold\x1b[0m`);
         }
         cacheSegment = parts.join(' ');
       } else if (usageNull && hadCacheBefore) {
